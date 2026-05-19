@@ -204,9 +204,9 @@ Skill提供两个命令：
 
 | 页面 | 功能 |
 |------|------|
-| **Agents** | Agent状态（活跃/离线、心跳时间、视角、模型）+ 需求信息 + 手动注册Agent |
+| **Agents** | Agent状态（活跃/离线、心跳时间、视角、模型）+ 需求信息 + 手动注册Agent + 实时事件流 |
 | **Flow** | 讨论流程时间线（Proposals→Challenges→Revisions→Optimizations→DA→Votes） |
-| **Decisions** | 人类决策界面（假设审核、需求批准、问题解决、辩论审核） |
+| **Decisions** | 人类决策界面（假设审核、需求批准、问题解决、辩论审核、最大轮次裁决） |
 | **Document** | 设计文档预览 |
 
 ### 人类决策
@@ -219,6 +219,7 @@ Skill提供两个命令：
 | 需求批准 | Agent重写需求后 | 点击Approve按钮 |
 | 待决问题 | Agent提出问题 | 点击备选项按钮 |
 | 共识分歧 | 2+Agent反对 | Approve / Reject / Override |
+| 最大轮次 | 达到max_rounds仍未完成 | Approve / Reject / Override |
 
 所有决策都提供备选项，人类只需点击选择。
 
@@ -298,14 +299,25 @@ docker compose up -d
 | `DESIGNDOC_HOST` | `0.0.0.0` | 监听地址 |
 | `DESIGNDOC_PORT` | `8765` | 监听端口 |
 | `DESIGNDOC_API_TOKEN` | 空 | API认证Token（空=不启用） |
+| `DESIGNDOC_STORAGE` | `json` | 存储后端类型 (json/sqlite) |
 | `DESIGNDOC_NO_WEB` | 空 | 设为`1`禁用Web UI |
 | `DESIGNDOC_LOG_DIR` | 空 | 日志文件目录（空=仅控制台输出） |
 
 ## 技术栈
 
-- **Python 3.12+** + **FastMCP 3.x** (MCP服务器框架)
+- **Python 3.10+** + **FastMCP >=2.0** (MCP服务器框架)
 - **FastAPI** (Web UI + REST API)
 - **Pydantic 2.x** (数据模型与校验)
-- **文件持久化** + 文件锁 (并发安全)
+- **文件持久化** + 文件锁 (并发安全) / **SQLite** (可选存储后端)
 - **Streamable HTTP传输** (多Agent共享连接 + 实时事件推送)
 - **Alpine.js + Tailwind CSS** (Web UI，零构建步骤)
+
+## 项目文档
+
+| 文档 | 说明 |
+|------|------|
+| [docs/specification.md](docs/specification.md) | 技术规格 — 项目实现的唯一权威参考 |
+| [docs/design-v1.md](docs/design-v1.md) | 原始设计文档 — 项目初始设计蓝图 |
+| [docs/decision-points.md](docs/decision-points.md) | 按分歧点决策功能规划 |
+| [docs/issues.md](docs/issues.md) | 问题跟踪与实现规划 |
+| [docs/restructure.md](docs/restructure.md) | 架构重构方案 |

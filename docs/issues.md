@@ -10,7 +10,7 @@
 |----------|------|------|
 | **P0 致命** | 3 | ✅ 已修复 |
 | **P1 高** | 5 | ✅ 已修复 5 / 📋 待修复 0 |
-| **P2 中** | 11 | 📋 待修复 |
+| **P2 中** | 11 | ✅ 已修复 4 / 📋 待修复 7 |
 | **P3 低** | 5 | 📋 待规划 |
 
 ---
@@ -113,17 +113,17 @@
 
 **修复方案**: 无数据时跳过该章节或显示"待辩论后生成"
 
-### P2-4: EventBus 非线程安全
+### P2-4: EventBus 非线程安全 ✅
 
-**文件**: `events.py` | **优先级**: 中
+**文件**: `events.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: `_subscribers` 是普通 dict，并发修改可能导致 RuntimeError。
 
 **修复方案**: 使用 `threading.Lock` 保护 `_subscribers` 修改操作
 
-### P2-5: 性能瓶颈 - 每次 get_session 都从磁盘重新加载
+### P2-5: 性能瓶颈 - 每次 get_session 都从磁盘重新加载 ✅
 
-**文件**: `store.py` | **优先级**: 中
+**文件**: `store.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: `get_session` 每次调用都执行 `_reload_session`（读文件 + JSON解析 + Pydantic验证），是系统最大性能瓶颈。
 
@@ -153,25 +153,25 @@
 
 **修复方案**: 检查 session 状态，未完成时返回提示信息
 
-### P2-9: submit_challenge 无目标验证
+### P2-9: submit_challenge 无目标验证 ✅
 
-**文件**: `engine.py` | **优先级**: 中
+**文件**: `engine.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: `submit_challenge` 不验证 `target_agent_id` 和 `target_proposal_id` 是否存在，也不禁止自我挑战和重复提交。可传入任意字符串作为目标。
 
-**修复方案**: 添加 target_agent_id 存在性检查、target_proposal_id 存在性检查、禁止 target_agent_id == agent_id
+**修复方案**: 已添加 target_agent_id 存在性检查、target_proposal_id 存在性检查、禁止 target_agent_id == agent_id
 
-### P2-10: submit_assumptions 重复检查逻辑有误
+### P2-10: submit_assumptions 重复检查逻辑有误 ✅
 
-**文件**: `engine.py` | **优先级**: 中
+**文件**: `engine.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: 重复提交检查过滤条件 `a.agent_id == agent_id and session.clarify_round` 中，`session.clarify_round` 是整数始终为 truthy，实际效果是同一 agent 在任何轮次只能提交一次假设，阻止了多轮澄清（MAX_CLARIFY_ROUNDS=3）的正常工作。
 
 **修复方案**: Assumption 模型增加 `clarify_round` 字段，重复检查改为 `a.agent_id == agent_id and a.clarify_round == session.clarify_round`
 
-### P2-11: _save 不更新 mtime 缓存
+### P2-11: _save 不更新 mtime 缓存 ✅
 
-**文件**: `store.py` | **优先级**: 中
+**文件**: `store.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: `_save` 方法只更新 `_sessions` 内存缓存，不更新 `_mtimes` 缓存。后续 `_reload_session` 会因磁盘 mtime 比缓存新而不必要地重新读取和解析 JSON 文件，即使内存中已有最新数据。
 
@@ -270,9 +270,9 @@ Agent可能因为网络问题暂时离线，重新连接后需要同步错过的
 | EventBus 线程安全 | P2 | 低 | ✅ 已修复 |
 | deregister_agent | P3 | 低 | 📋 待规划 |
 | delete_session MCP工具 | P3 | 低 | 📋 待规划 |
-| submit_challenge 目标验证 | P2 | 低 | 📋 待修复 |
-| submit_assumptions 重复检查修复 | P2 | 低 | 📋 待修复 |
-| _save 更新mtime缓存 | P2 | 低 | 📋 待修复 |
+| submit_challenge 目标验证 | P2 | 低 | ✅ 已修复 |
+| submit_assumptions 重复检查修复 | P2 | 低 | ✅ 已修复 |
+| _save 更新mtime缓存 | P2 | 低 | ✅ 已修复 |
 
 ### v1.3 — 场景扩展
 
@@ -288,17 +288,18 @@ Agent可能因为网络问题暂时离线，重新连接后需要同步错过的
 
 ---
 
-## 七、文档拆分建议
+## 七、文档组织
 
-当前 `README.md` 已超过400行，建议按功能模块拆分：
+当前项目文档集中放置在 `docs/` 目录：
 
 | 文档 | 内容 |
 |------|------|
-| `README.md` | 项目概览、快速开始、架构图 |
-| `docs/flow.md` | 5种场景化流程详细说明 |
-| `docs/api.md` | MCP工具清单 + Web API端点 |
-| `docs/deploy.md` | 部署方式（本地/Docker/配置） |
+| `docs/specification.md` | 技术规格（项目实现的唯一权威参考） |
+| `docs/design-v1.md` | 原始设计文档（项目初始设计蓝图） |
+| `docs/decision-points.md` | 按分歧点决策功能规划 |
 | `docs/issues.md` | 本文档（问题跟踪 + 实现规划） |
+| `docs/restructure.md` | 架构重构方案 |
+| `data/examples/digital-twin.md` | 外部测试需求文档示例 |
 
 ---
 

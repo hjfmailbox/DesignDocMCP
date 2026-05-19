@@ -39,10 +39,12 @@
 | 清晰度评估配置外部化（clarity_config.py） | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
 | 魔法数字替换为命名常量 | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
 | 配置验证机制（validate_config） | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
-| 版本号统一（pyproject.toml vs server.py） | 📋 未开始 | 2026-05-20 | — |
+| 版本号统一（pyproject.toml vs server.py） | ✅ 已完成 | 2026-05-20 | 2026-05-20 |
 | Docker/start.sh传输协议更新（SSE→HTTP） | 📋 未开始 | 2026-05-20 | — |
 | .trae/mcp.json配置更新 | 📋 未开始 | 2026-05-20 | — |
 | configs/目录创建与参考配置 | 📋 未开始 | 2026-05-20 | — |
+| SQLite存储后端（sqlite_store.py） | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
+| Blocking-pull协议（wait_for_task/submit_result） | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
 
 ### 阶段四：健壮性提升 [未开始]
 
@@ -98,8 +100,11 @@ designdoc-mcp/
 ├── configs/
 │   └── claude_desktop_config.json          # MCP客户端配置示例
 ├── docs/
-│   ├── integration.md                      # 本文档（技术规格）
-│   └── issues.md                           # 问题跟踪与实现规划
+│   ├── specification.md                  # 本文档（技术规格）
+│   ├── design-v1.md                      # 原始设计文档
+│   ├── decision-points.md                # 按分歧点决策功能规划
+│   ├── issues.md                         # 问题跟踪与实现规划
+│   └── restructure.md                    # 架构重构方案
 ├── src/
 │   └── designdoc_mcp/
 │       ├── __init__.py                     # 包初始化
@@ -107,6 +112,8 @@ designdoc-mcp/
 │       ├── engine.py                       # 核心业务逻辑（CollaborationEngine）
 │       ├── server.py                       # MCP服务器（FastMCP工具定义 + main入口）
 │       ├── store.py                        # 数据持久化（SessionStore）
+│       ├── clarity_config.py               # 清晰度评估配置（维度关键词 + 评分常量）
+│       ├── sqlite_store.py                 # SQLite存储后端（StorageBackend + SQLiteBackend）
 │       ├── events.py                       # 事件总线（EventBus）
 │       ├── web.py                          # Web UI + REST API（FastAPI）
 │       ├── document.py                     # 文档生成（4层输出）
@@ -234,6 +241,16 @@ class ChallengeCategory(str, enum.Enum):
     SECURITY = "security"
 ```
 
+#### ChallengePriority — 挑战优先级
+
+```python
+class ChallengePriority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+```
+
 #### VoteType — 投票类型
 
 ```python
@@ -254,8 +271,8 @@ class AgentInfo(BaseModel):
     name: str                                        # 显示名称
     model: str = ""                                  # LLM模型标识
     provider: str = ""                               # 模型提供商
-    registered_at: str                               # ISO 8601 UTC
-    last_active_at: str                              # ISO 8601 UTC，提交/心跳时更新
+    registered_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
+    last_active_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC，提交/心跳时更新
     is_active: bool = True                           # 超时后标记为False
     current_perspective: str = ""                    # 当前分配的视角
 ```
@@ -281,7 +298,7 @@ class Event(BaseModel):
     category: str = ""
     references: list[str] = []
     metadata: dict[str, Any] = {}
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### AssumptionAlternative
@@ -304,8 +321,9 @@ class Assumption(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     alternatives: list[AssumptionAlternative] = []   # 自动追加"Other"选项
     rationale: str = ""
+    clarify_round: int = 1                           # 用于区分不同澄清轮次的假设提交
     human_choice: str = ""                           # 人类审核后的选择
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### MergedAssumptionGroup
@@ -327,7 +345,7 @@ class RefinedRequirement(BaseModel):
     refined_statement: str
     constraints: list[str] = []
     acceptance_criteria: list[str] = []
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Proposal
@@ -346,7 +364,7 @@ class Proposal(BaseModel):
     assumptions: str = ""
     unknowns: str = ""
     raw_content: str = ""
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Challenge
@@ -363,9 +381,9 @@ class Challenge(BaseModel):
     missing_considerations: list[str] = []
     alternative_proposal: str = ""
     category: ChallengeCategory = ChallengeCategory.ARCHITECTURE
-    priority: str = "medium"                         # low/medium/high/critical
+    priority: ChallengePriority = ChallengePriority.MEDIUM
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Revision
@@ -380,7 +398,7 @@ class Revision(BaseModel):
     rejected_feedback: list[str] = []
     rejection_reasons: list[str] = []
     changed_design: str = ""
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Optimization
@@ -395,7 +413,7 @@ class Optimization(BaseModel):
     impact: str = ""
     tradeoff: str = ""
     complexity_change: str = ""                      # increased/decreased/neutral
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### DevilsAdvocate
@@ -409,7 +427,7 @@ class DevilsAdvocate(BaseModel):
     failure_modes: list[str] = []
     risk_score: float = Field(default=0.5, ge=0.0, le=1.0)
     mitigation: str = ""
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### ConsensusVote
@@ -422,7 +440,7 @@ class ConsensusVote(BaseModel):
     round_number: int
     vote_type: VoteType
     comment: str = ""
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### QuestionOption
@@ -445,7 +463,7 @@ class PendingQuestion(BaseModel):
     resolved: bool = False
     resolution: str = ""
     human_choice: str = ""
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Requirement
@@ -465,7 +483,7 @@ class Requirement(BaseModel):
     clarity_score: float = 0.0                       # 0.0~1.0
     clarity_dimensions: dict[str, bool] = {}         # 各维度覆盖情况
     skip_clarification: bool = False                 # clarity_score >= 0.7时为True
-    created_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Session
@@ -497,8 +515,8 @@ class Session(BaseModel):
     pending_questions: list[PendingQuestion] = []
     novelty_scores: list[float] = []
     devils_advocate_agent: str = ""                  # 被指定为魔鬼代言人的agent_id
-    created_at: str                                  # ISO 8601 UTC
-    updated_at: str                                  # ISO 8601 UTC
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
     completed_at: str | None = None
     archived_at: str | None = None
     metadata: dict[str, Any] = {}
@@ -658,6 +676,7 @@ class Session(BaseModel):
 - **→ CLARIFY_REFINE**: 执行 `_merge_assumptions(session)`
 - **→ DEVILS_ADVOCATE**: `session.devils_advocate_agent = random.choice([a.agent_id for a in session.agents])`
 - **→ PROPOSAL**: 执行 `_assign_perspectives(session)`
+- **每次推进后**: 执行 `_push_tasks_for_phase(session)` 为活跃agent创建新阶段任务
 
 ### 5.7 视角分配算法（_assign_perspectives）
 
@@ -682,9 +701,9 @@ for i, agent in enumerate(session.agents):
 |--------|------|----------|
 | 阶段检查 | 当前阶段必须为 CRITIC | ValueError |
 | 提交者验证 | agent_id 必须是已注册Agent | ValueError |
-| 目标Agent存在 | **不验证** target_agent_id 是否存在 | 允许任意字符串 |
-| 目标提案存在 | **不验证** target_proposal_id 是否存在 | 允许任意字符串 |
-| 自我挑战 | **不禁止** target_agent_id == agent_id | 允许 |
+| 目标Agent存在 | **验证** target_agent_id 必须是已注册Agent | ValueError |
+| 目标提案存在 | **验证** target_proposal_id 必须在当前轮次提案中 | ValueError |
+| 自我挑战 | **禁止** target_agent_id == agent_id | ValueError |
 | 重复提交 | **不检查** 同一agent可多次提交challenge | 允许 |
 
 #### submit_assumptions 重复提交检查
@@ -692,7 +711,7 @@ for i, agent in enumerate(session.agents):
 | 验证项 | 条件 | 错误行为 |
 |--------|------|----------|
 | 阶段检查 | 当前阶段必须为 CLARIFY_IDENTIFY | ValueError |
-| 重复提交 | 同一 agent_id 已有假设记录 | ValueError（注意：当前实现按 `a.agent_id == agent_id and session.clarify_round` 过滤，`session.clarify_round` 为整数始终为 truthy，实际效果是同一agent在任何轮次只能提交一次） |
+| 重复提交 | 同一 agent_id 在同一 clarify_round 已有假设记录（`a.agent_id == agent_id and a.clarify_round == session.clarify_round`） | ValueError |
 | "Other"选项 | alternatives 中无 "Other" 项 | 自动追加 `AssumptionAlternative(label="Other", description="Custom input")` |
 
 ### 5.10 Agent活跃度管理
@@ -730,7 +749,8 @@ for i, agent in enumerate(session.agents):
 - 重新分配视角 `_assign_perspectives(session)`
 
 **human_override**:
-- 不要求特定状态
+- 不要求特定状态（但禁止 ARCHIVED 状态）
+- `if session.status == SessionStatus.ARCHIVED: raise ValueError(...)`
 - `status = COMPLETED`，记录 `completed_at`
 - 记录 `metadata["human_override"] = {decision, rationale, approver}`
 
@@ -840,7 +860,7 @@ data_dir/
 3. 写入JSON: session.model_dump_json(indent=2)
 4. 原子重命名: shutil.move(tmp_path, session_path)
 5. 异常时清理临时文件
-6. 更新内存缓存（_sessions），但不更新mtime缓存（_mtimes）
+6. 更新内存缓存（_sessions），并更新mtime缓存（_mtimes）
    注意: 后续_reload_session会因mtime变更而重新读取，但内存中已有最新数据
 ```
 
@@ -959,9 +979,11 @@ def _get_engine() -> CollaborationEngine:  # 懒初始化，依赖_get_store()
 | 工具 | 签名 |
 |------|------|
 | `submit_requirement` | `(session_id, problem_statement, constraints=None, acceptance_criteria=None, open_questions=None, tech_preferences=None, forbidden_items=None) → dict` |
-| `register_agent` | `(session_id, name, model="", provider="") → dict` |
+| `register_agent` | `(session_id="", name="", model="", provider="") → dict` |
 | `add_requirement_delta` | `(session_id, delta_statement, constraints=None, acceptance_criteria=None) → dict` |
 | `force_skip_clarification` | `(session_id) → dict` |
+
+> register_agent 的 session_id 为空时自动选择唯一活跃会话
 
 #### 澄清阶段
 
@@ -997,6 +1019,13 @@ def _get_engine() -> CollaborationEngine:  # 懒初始化，依赖_get_store()
 | `heartbeat` | `(session_id, agent_id) → dict` |
 | `check_stalled` | `(session_id) → dict` |
 
+#### 任务分发
+
+| 工具 | 签名 |
+|------|------|
+| `wait_for_task` | `(session_id, agent_id, timeout=300) → dict` |
+| `submit_result` | `(session_id, agent_id, task_id, result) → dict` |
+
 #### 问题与决策
 
 | 工具 | 签名 |
@@ -1021,6 +1050,7 @@ def _get_engine() -> CollaborationEngine:  # 懒初始化，依赖_get_store()
 |-----|------|---------|
 | `designdoc://sessions` | 列出所有会话 | 每行: `- {session_id}: {title} [{status}] Phase: {phase} Round: {round}`；空时: "No sessions found." |
 | `designdoc://session/{session_id}` | 获取会话设计文档 | `generate_design_document(session)` 的完整Markdown；不存在时: "Session '{session_id}' not found." |
+| `designdoc://active-session` | 获取当前活跃会话信息 | JSON格式会话摘要；无活跃会话时返回提示信息 |
 
 ### 8.5 main() 入口函数
 
@@ -1126,7 +1156,7 @@ rationale: string (仅override使用, 为空时fallback到reason值)
   "proposals": [{"proposal_id": "...", "agent_id": "...", "architecture": "...", "tech_stack": "...", "round": 1}],
   "votes": [{"agent_id": "...", "vote_type": "...", "comment": "..."}],
   "pending_questions": [{"question_id": "...", "asked_by": "...", "question": "...", "options": [...]}],
-  "events": [...],  // 最近50条
+  "events": [...],  // 最近100条
   "needs_human": false,
   "human_actions": []  // 可能值: review_debate, review_assumptions, approve_refined_requirement, resolve_questions
 }
@@ -1397,6 +1427,7 @@ volumes:
 | `DESIGNDOC_PORT` | `8765` | SSE/HTTP监听端口 |
 | `DESIGNDOC_API_TOKEN` | 空 | API认证Token（空=不启用认证） |
 | `DESIGNDOC_NO_WEB` | 空 | 设为`1`禁用Web UI |
+| `DESIGNDOC_STORAGE` | `json` | 存储后端类型 (json/sqlite) |
 | `DESIGNDOC_LOG_DIR` | 空 | 日志文件目录（空=仅控制台输出，设置后写入 `designdoc_mcp.log`） |
 
 ---
