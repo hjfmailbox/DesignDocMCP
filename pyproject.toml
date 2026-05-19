@@ -1,0 +1,37 @@
+[project]
+name = "designdoc-mcp"
+version = "0.3.0"
+description = "MCP-driven multi-agent design document collaboration system with 6-phase structured debate"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+designdoc-mcp = "designdoc_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

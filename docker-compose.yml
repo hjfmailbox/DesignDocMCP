@@ -1,0 +1,17 @@
+services:
+  designdoc-mcp:
+    build: .
+    container_name: designdoc-mcp
+    ports:
+      - "8765:8765"
+    volumes:
+      - designdoc-data:/data
+    environment:
+      - DESIGNDOC_DATA_DIR=/data
+      - DESIGNDOC_TRANSPORT=http
+      - DESIGNDOC_HOST=0.0.0.0
+      - DESIGNDOC_PORT=8765
+    restart: unless-stopped
+
+volumes:
+  designdoc-data:
