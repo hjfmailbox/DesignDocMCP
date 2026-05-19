@@ -1255,10 +1255,12 @@ class CollaborationEngine:
         return len([a for a in session.agents if a.is_active])
 
     def heartbeat(self, session_id: str, agent_id: str) -> dict[str, Any]:
+        hb_logger = logging.getLogger("designdoc_mcp.heartbeat")
         session = self._get(session_id)
         self._validate_agent(session, agent_id)
         self._touch_agent(session, agent_id)
         self.store.update_session(session)
+        hb_logger.info("heartbeat: session=%s agent=%s phase=%s round=%d", session_id, agent_id, session.current_phase.value, session.current_round)
         return {
             "session_id": session_id,
             "agent_id": agent_id,

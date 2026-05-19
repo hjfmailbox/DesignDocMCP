@@ -197,6 +197,17 @@ def register_agent(
     data = result.model_dump()
     data["session_id"] = resolved_sid
     logger.info("register_agent success: agent_id=%s, session_id=%s", result.agent_id, resolved_sid)
+
+    # 自动执行 heartbeat + get_phase_context，让 agent 立即进入协作状态
+    try:
+        engine.heartbeat(resolved_sid, result.agent_id)
+        phase_ctx = engine.get_phase_context(resolved_sid, result.agent_id)
+        data["auto_heartbeat"] = "ok"
+        data["phase_context"] = phase_ctx
+    except Exception as e:
+        logger.warning("register_agent auto-advance failed: %s", e)
+        data["auto_heartbeat"] = f"failed: {e}"
+
     return data
 
 
@@ -1197,11 +1208,22 @@ def main() -> None:
             log_dir = str(Path(__file__).resolve().parent.parent.parent / "logs")
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_path / "designdoc_mcp.log", encoding="utf-8")
-        file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-        logging.getLogger().addHandler(file_handler)
-        logging.getLogger("uvicorn").addHandler(file_handler)
-        logging.getLogger("uvicorn.access").addHandler(file_handler)
+
+        # 主日志
+        main_handler = logging.FileHandler(log_path / "designdoc_mcp.log", encoding="utf-8")
+        main_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        main_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
+        logging.getLogger().addHandler(main_handler)
+
+        # 心跳日志（单独文件）
+        hb_handler = logging.FileHandler(log_path / "heartbeat.log", encoding="utf-8")
+        hb_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+        hb_logger = logging.getLogger("designdoc_mcp.heartbeat")
+        hb_logger.addHandler(hb_handler)
+        hb_logger.propagate = False  # 不传播到根 logger
+
+        logging.getLogger("uvicorn").addHandler(main_handler)
+        logging.getLogger("uvicorn.access").addHandler(main_handler)
         logging.getLogger().setLevel(logging.DEBUG)
         logger.info("DesignDoc MCP server starting - logs: %s", log_path)
         logger.info("MCP endpoints: SSE=GET /sse + POST /messages, StreamableHTTP=POST /mcp")
