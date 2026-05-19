@@ -369,10 +369,10 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
           <div class="flex items-center gap-2">
             <span class="font-medium text-sm" x-text="evtSourceLabel(e)"></span>
             <span class="badge text-xs" :class="evtBadgeClass(e.type)" x-text="e.type.replace(/_/g,' ')"></span>
-            <span x-show="e.phase" class="badge b-ph text-xs" x-text="e.phase"></span>
+            <span x-show="e.phase" class="badge b-ph text-xs" x-text="e.phase.replace(/_/g,' ')"></span>
             <span x-show="e.round" class="text-xs" style="color:var(--t3)" x-text="'R'+e.round"></span>
           </div>
-          <p class="text-xs mt-0.5" style="color:var(--t2)" x-text="e.content"></p>
+          <p class="text-xs mt-0.5" style="color:var(--t2)" x-text="e.content || evtFallbackContent(e)"></p>
         </div>
         <div class="flex-shrink-0 text-xs" style="color:var(--t3)" x-text="evtTimeAgo(e.created_at)"></div>
       </div>
@@ -812,7 +812,16 @@ function app(){
     evtSourceLabel(e){
       const src=e.source||'system';
       if(src==='system')return'System';
-      return this.agentName(src);
+      const name=this.agentName(src);
+      // 如果 agentName 返回原始 agent_id，提取可读名称
+      if(name===src&&src.includes('__')){
+        return src.split('__')[0].replace(/_/g,' ');
+      }
+      return name;
+    },
+    evtFallbackContent(e){
+      const m={system_event:'System event',assumption:'Assumption identified',assumption_supplement:'Assumption supplement',proposal:'Proposal submitted',challenge:'Challenge submitted',revision:'Revision submitted',optimization:'Optimization suggestion',risk:'Risk identified',consensus_vote:'Vote cast',human_decision:'Human decision',question:'Question raised',requirement_refine:'Requirement refined'};
+      return m[e.type]||e.type.replace(/_/g,' ');
     },
     evtIconClass(type){
       const m={system_event:'ei-system',assumption:'ei-assumption',assumption_supplement:'ei-assumption',proposal:'ei-proposal',challenge:'ei-challenge',revision:'ei-revision',optimization:'ei-optimization',risk:'ei-risk',consensus_vote:'ei-vote',human_decision:'ei-human',question:'ei-question',requirement_refine:'ei-refine'};
