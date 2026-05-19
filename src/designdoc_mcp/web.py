@@ -458,7 +458,7 @@ def _serialize_session(session: Any) -> dict[str, Any]:
             "risks": c.risks,
             "missing_considerations": c.missing_considerations,
             "category": c.category.value if hasattr(c.category, "value") else str(c.category),
-            "priority": c.priority,
+            "priority": c.priority.value if hasattr(c.priority, "value") else str(c.priority),
             "round": c.round_number,
         })
 
@@ -565,6 +565,19 @@ def _serialize_session(session: Any) -> dict[str, Any]:
             "skip_clarification": session.requirement.skip_clarification if session.requirement else False,
             "is_refined": session.requirement.is_refined if session.requirement else False,
         } if session.requirement else None,
+        "assumptions": [
+            {
+                "assumption_id": a.assumption_id,
+                "agent_id": a.agent_id,
+                "dimension": a.dimension,
+                "assumption": a.assumption,
+                "confidence": a.confidence,
+                "alternatives": [{"label": alt.label, "description": alt.description} for alt in a.alternatives],
+                "human_choice": a.human_choice,
+                "clarify_round": a.clarify_round,
+            }
+            for a in session.assumptions
+        ] if session.assumptions else [],
         "merged_assumptions": [
             {
                 "dimension": g.dimension,
