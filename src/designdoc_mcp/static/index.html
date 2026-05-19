@@ -294,6 +294,7 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
           <p class="text-sm">No agents registered yet</p>
           <p class="text-xs mt-1">Use <code style="color:var(--ac)">/register <span x-text="s.session_id"></span></code> in your agent to join</p>
         </div>
+      </div>
     </div>
     <div>
       <h3 class="text-sm font-semibold mb-3" style="color:var(--t2)"><i class="fas fa-file-lines mr-1"></i>Requirement</h3>
@@ -530,12 +531,13 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
 <div x-show="tab==='decisions'">
   <div x-show="!s.needs_human" class="card p-8 text-center" style="color:var(--t3)">
     <i class="fas fa-check-circle text-3xl mb-3" style="color:var(--ok)"></i>
-    <p class="text-lg">No pending decisions</p>
-    <p class="text-sm mt-1">You will be notified when human input is needed.</p>
+    <p class="text-lg">暂无待处理决策</p>
+    <p class="text-sm mt-1">当需要您参与时，此处会显示相应操作。</p>
   </div>
   <div x-show="s.needs_human" class="space-y-4">
     <div x-show="s.human_actions.includes('review_assumptions')" class="card p-4">
-      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-list-check" style="color:var(--wn)"></i> Review Assumptions</h3>
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-list-check" style="color:var(--wn)"></i> 确认假设条件</h3>
+      <p class="text-sm mb-3" style="color:var(--t2)">Agent 识别出以下设计假设，请选择每个假设的适用方案：</p>
       <template x-for="(g, gi) in s.merged_assumptions" :key="'a'+gi">
         <div class="mb-3 p-3" style="background:var(--bg3);border-radius:6px">
           <div class="flex items-center gap-2 mb-2">
@@ -556,7 +558,8 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
       </template>
     </div>
     <div x-show="s.human_actions.includes('approve_refined_requirement')" class="card p-4">
-      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-file-signature" style="color:var(--wn)"></i> Approve Refined Requirement</h3>
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-file-signature" style="color:var(--wn)"></i> 审核优化后的需求</h3>
+      <p class="text-sm mb-3" style="color:var(--t2)">Agent 已根据讨论优化了需求描述，请确认是否采用：</p>
       <template x-for="r in s.refined_requirements" :key="r.refine_id">
         <div class="p-3 mb-2" style="background:var(--bg3);border-radius:6px">
           <div class="flex items-center justify-between gap-3">
@@ -564,13 +567,14 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
               <span class="text-xs" style="color:var(--t3)" x-text="'by '+agentName(r.agent_id)"></span>
               <p class="text-sm mt-1" style="color:var(--t2);max-height:120px;overflow-y:auto" x-text="r.refined_statement"></p>
             </div>
-            <button @click="apiCall('/approve-refined-requirement',{refine_id:r.refine_id})" class="btn btn-p text-xs flex-shrink-0">Approve</button>
+            <button @click="apiCall('/approve-refined-requirement',{refine_id:r.refine_id})" class="btn btn-p text-xs flex-shrink-0">采用</button>
           </div>
         </div>
       </template>
     </div>
     <div x-show="s.human_actions.includes('resolve_questions')" class="card p-4">
-      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-question-circle" style="color:var(--wn)"></i> Resolve Questions</h3>
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-question-circle" style="color:var(--wn)"></i> 回答待解决问题</h3>
+      <p class="text-sm mb-3" style="color:var(--t2)">Agent 在分析需求时发现以下问题需要您明确，请选择答案：</p>
       <template x-for="q in s.pending_questions" :key="q.question_id">
         <div class="p-3 mb-2" style="background:var(--bg3);border-radius:6px">
           <p class="text-sm font-medium mb-2" x-text="q.question"></p>
@@ -582,13 +586,97 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
         </div>
       </template>
     </div>
-    <div x-show="s.human_actions.includes('review_debate')" class="card p-4">
-      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-gavel" style="color:var(--wn)"></i> Debate Review Required</h3>
-      <p class="text-sm mb-3" style="color:var(--t2)">Consensus could not be reached. Please review and decide.</p>
-      <div class="flex gap-2">
-        <button @click="apiCall('/human-decision',{action:'approve',reason:'Approved via Web UI'})" class="btn btn-p"><i class="fas fa-check"></i>Approve</button>
-        <button @click="apiCall('/human-decision',{action:'reject',reason:'Rejected via Web UI'})" class="btn btn-d"><i class="fas fa-times"></i>Reject</button>
-        <button @click="showOverrideModal()" class="btn btn-s"><i class="fas fa-edit"></i>Override</button>
+    <div x-show="s.human_actions.includes('review_debate')" class="space-y-4">
+      <!-- 流程中断提示（非共识阶段） -->
+      <div class="card p-4" x-show="s.phase!=='consensus'">
+        <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-pause-circle" style="color:var(--wn)"></i> 讨论中断</h3>
+        <p class="text-sm mb-3" style="color:var(--t2)" x-text="s.human_review_reason || '会话在 '+s.phase+' 阶段中断，需要人工处理'"></p>
+        <div class="p-3 mb-3" style="background:var(--bg3);border-radius:6px">
+          <p class="text-xs" style="color:var(--t3)">当前阶段：<span class="badge b-ac text-xs" x-text="s.phase"></span></p>
+          <p class="text-xs mt-1" style="color:var(--t3)">已提交提案：<span x-text="s.proposals.length"></span> 个</p>
+          <p class="text-xs mt-1" style="color:var(--t3)">已提交挑战：<span x-text="s.challenges.length"></span> 个</p>
+        </div>
+        <p class="text-sm mb-3" style="color:var(--t2)">您可以选择继续推进流程，或结束讨论：</p>
+        <div class="flex gap-2">
+          <button @click="apiCall('/human-decision',{action:'approve',reason:'Continue from Web UI'})" class="btn btn-p"><i class="fas fa-play"></i>继续推进</button>
+          <button @click="apiCall('/human-decision',{action:'reject',reason:'Rejected via Web UI'})" class="btn btn-d"><i class="fas fa-stop"></i>结束讨论</button>
+        </div>
+      </div>
+
+      <!-- 共识失败详情（共识阶段） -->
+      <div x-show="s.phase==='consensus'">
+        <!-- 投票结果概览 -->
+        <div class="card p-4">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-chart-pie" style="color:var(--wn)"></i> 投票结果</h3>
+          <p class="text-sm mb-3" style="color:var(--t2)" x-text="s.human_review_reason || '各 Agent 已完成投票，未能自动达成共识'"></p>
+          <div class="space-y-2">
+            <template x-for="v in s.votes.filter(vote=>vote.round===s.round)" :key="v.agent_id+v.vote_type">
+              <div class="flex items-center gap-3 p-2" style="background:var(--bg3);border-radius:6px">
+                <i class="fas" :class="v.vote_type==='agree'?'fa-check-circle':v.vote_type==='disagree'?'fa-times-circle':'fa-question-circle'" :style="'color:'+(v.vote_type==='agree'?'var(--ok)':v.vote_type==='disagree'?'var(--er)':'var(--wn)')"></i>
+                <span class="text-sm font-medium" x-text="agentName(v.agent_id)"></span>
+                <span class="badge text-xs" :class="v.vote_type==='agree'?'b-ok':v.vote_type==='disagree'?'b-er':'b-wn'" x-text="v.vote_type==='agree'?'赞同':v.vote_type==='disagree'?'反对':'需澄清'"></span>
+                <span x-show="v.comment" class="text-xs" style="color:var(--t3)" x-text="v.comment"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 提案对比 -->
+        <div class="card p-4" x-show="s.proposals.length>0">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-file-lines" style="color:var(--ac)"></i> 各方提案</h3>
+          <div class="space-y-3">
+            <template x-for="p in s.proposals.filter(prop=>prop.round===s.round)" :key="p.proposal_id">
+              <div class="p-3" style="background:var(--bg3);border-radius:6px">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="font-medium text-sm" x-text="agentName(p.agent_id)"></span>
+                  <span x-show="p.perspective" class="badge b-ac text-xs" x-text="p.perspective"></span>
+                  <span class="badge b-ph text-xs" x-text="'R'+p.round"></span>
+                </div>
+                <p class="text-sm" style="color:var(--t2);max-height:100px;overflow-y:auto" x-text="p.architecture"></p>
+                <p x-show="p.tech_stack" class="text-xs mt-1" style="color:var(--t3)" x-text="'技术栈: '+p.tech_stack"></p>
+                <p x-show="p.tradeoffs" class="text-xs mt-1" style="color:var(--wn)" x-text="'权衡: '+p.tradeoffs"></p>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 质疑与挑战 -->
+        <div class="card p-4" x-show="s.challenges.length>0">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-bolt" style="color:var(--er)"></i> 质疑与挑战</h3>
+          <div class="space-y-3">
+            <template x-for="c in s.challenges.filter(ch=>ch.round===s.round)" :key="c.challenge_id">
+              <div class="p-3" style="background:var(--bg3);border-radius:6px">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="font-medium text-sm" x-text="agentName(c.agent_id)+' → '+agentName(c.target_agent_id)"></span>
+                  <span class="badge" :class="c.priority==='critical'?'b-er':c.priority==='high'?'b-wn':'b-ph'" x-text="c.priority"></span>
+                </div>
+                <div x-show="c.risks.length" class="mb-1">
+                  <span class="text-xs" style="color:var(--er)">风险：</span>
+                  <template x-for="r in c.risks" :key="r">
+                    <span class="badge b-er text-xs mr-1" x-text="r"></span>
+                  </template>
+                </div>
+                <div x-show="c.missing_considerations.length" class="mb-1">
+                  <span class="text-xs" style="color:var(--wn)">遗漏：</span>
+                  <template x-for="m in c.missing_considerations" :key="m">
+                    <span class="badge b-wn text-xs mr-1" x-text="m"></span>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 决策操作 -->
+        <div class="card p-4">
+          <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-gavel" style="color:var(--wn)"></i> 您的裁决</h3>
+          <p class="text-sm mb-3" style="color:var(--t2)">基于以上投票结果和各方观点，请选择最终决策：</p>
+          <div class="flex gap-2">
+            <button @click="apiCall('/human-decision',{action:'approve',reason:'Approved via Web UI'})" class="btn btn-p"><i class="fas fa-check"></i>采纳提案，结束讨论</button>
+            <button @click="apiCall('/human-decision',{action:'reject',reason:'Rejected via Web UI'})" class="btn btn-d"><i class="fas fa-times"></i>驳回提案，重新讨论</button>
+            <button @click="showOverrideModal()" class="btn btn-s"><i class="fas fa-edit"></i>自定义决策</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

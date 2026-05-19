@@ -615,6 +615,7 @@ def _serialize_session(session: Any) -> dict[str, Any]:
         "phase_progress": phase_progress,
         "needs_human": needs_human,
         "human_actions": human_actions,
+        "human_review_reason": session.metadata.get("human_review_reason", ""),
     }
 
 
