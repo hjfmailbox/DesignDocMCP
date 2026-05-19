@@ -26,8 +26,13 @@ _engine: CollaborationEngine | None = None
 def _get_store() -> SessionStore:
     global _store
     if _store is None:
+        storage_backend = os.environ.get("DESIGNDOC_STORAGE", "json").lower()
         data_dir = os.environ.get("DESIGNDOC_DATA_DIR")
-        _store = SessionStore(data_dir)
+        if storage_backend == "sqlite":
+            from .sqlite_store import SQLiteBackend
+            _store = SQLiteBackend(data_dir)  # type: ignore[assignment]
+        else:
+            _store = SessionStore(data_dir)
     return _store
 
 
@@ -942,6 +947,73 @@ def heartbeat(session_id: str, agent_id: str) -> dict[str, Any]:
     """
     engine = _get_engine()
     return engine.heartbeat(session_id, agent_id)
+
+
+@mcp.tool()
+def wait_for_task(session_id: str, agent_id: str, timeout: int = 300) -> dict[str, Any]:
+    """Blocking pull: wait for the next task assigned to this agent.
+
+    This is the CORE protocol of the system. Instead of polling or being pushed,
+    agents block-wait for tasks. The server assigns tasks based on the current
+    phase and round.
+
+    Call this after registering, and after submitting each result. The server
+    will return the next task when it's ready, or None on timeout.
+
+    IMPORTANT: During wait phases (clarify_review, human_review), keep calling
+    this with a reasonable timeout to maintain your heartbeat.
+
+    Args:
+        session_id: The session identifier
+        agent_id: Your agent identifier
+        timeout: Maximum seconds to wait (default: 300, max: 600)
+
+    Returns:
+        Task dict with keys: task_id, task_type, phase, round_number, payload
+        Or {"status": "timeout"} if no task available within timeout
+    """
+    engine = _get_engine()
+    actual_timeout = min(max(timeout, 1), 600)
+    task = engine.wait_for_task_engine(session_id, agent_id, timeout=float(actual_timeout))
+    if task is None:
+        return {"status": "timeout"}
+    return task
+
+
+@mcp.tool()
+def submit_result(session_id: str, agent_id: str, task_id: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Submit the result of a task and get the next task.
+
+    This is the unified submission interface. After completing a task obtained
+    from wait_for_task, submit the result here. The system will:
+    1. Record the result as an artifact
+    2. Mark the task as completed
+    3. Check if the phase is complete
+    4. Return the next task if available
+
+    The result dict should contain the artifact data specific to the task_type:
+    - submit_assumptions: {"assumptions": [...]}
+    - submit_proposal: {"architecture": "...", ...}
+    - submit_challenge: {"risks": [...], ...}
+    - submit_revision: {"changed_design": "...", ...}
+    - submit_optimization: {"description": "...", ...}
+    - submit_devils_advocate: {"failure_modes": [...], ...}
+    - cast_consensus_vote: {"vote_type": "agree", ...}
+
+    IMPORTANT: The result dict MUST include "_task_type" key matching the task_type
+    from wait_for_task, so the system knows which submission method to dispatch to.
+
+    Args:
+        session_id: The session identifier
+        agent_id: Your agent identifier
+        task_id: The task_id from wait_for_task
+        result: The result data dict (must include "_task_type")
+
+    Returns:
+        The next task dict, or {"status": "no_task"} if waiting
+    """
+    engine = _get_engine()
+    return engine.submit_result_engine(session_id, agent_id, task_id, result)
 
 
 @mcp.tool()

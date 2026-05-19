@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,8 @@ class SessionStore:
         self.requirements_dir = self.data_dir / "requirements"
         self._sessions: dict[str, Session] = {}
         self._mtimes: dict[str, float] = {}
+        # In-memory task queue for blocking-pull protocol
+        self._tasks: dict[str, list[dict]] = {}  # agent_id -> list of task dicts
         self._ensure_dirs()
         self._load_all()
 
@@ -225,3 +228,77 @@ class SessionStore:
         if session is None:
             raise ValueError(f"Session '{session_id}' not found")
         return session
+
+    # ------------------------------------------------------------------
+    # Task Inbox (blocking-pull protocol)
+    # ------------------------------------------------------------------
+
+    def push_task(
+        self,
+        session_id: str,
+        agent_id: str,
+        task_type: str,
+        phase: str,
+        round_number: int,
+        payload: dict | None = None,
+    ) -> str:
+        """Push a task into an agent's inbox. Returns the task_id."""
+        task_id = uuid.uuid4().hex[:12]
+        now = datetime.now(timezone.utc).isoformat()
+        task = {
+            "task_id": task_id,
+            "session_id": session_id,
+            "agent_id": agent_id,
+            "task_type": task_type,
+            "phase": phase,
+            "round_number": round_number,
+            "payload": payload or {},
+            "status": "pending",
+            "created_at": now,
+            "claimed_at": None,
+            "completed_at": None,
+        }
+        self._tasks.setdefault(agent_id, []).append(task)
+        logger.debug("push_task: agent=%s task_type=%s task_id=%s", agent_id, task_type, task_id)
+        return task_id
+
+    def wait_for_task(self, agent_id: str, timeout: float = 300.0) -> dict | None:
+        """Blocking pull: wait until a pending task is available or timeout."""
+        deadline = time.monotonic() + timeout
+        poll_interval = 1.0
+        while time.monotonic() < deadline:
+            task = self._get_pending_task(agent_id)
+            if task:
+                self.claim_task(task["task_id"], agent_id)
+                return task
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(poll_interval, remaining))
+        return None
+
+    def claim_task(self, task_id: str, agent_id: str) -> None:
+        """Mark a task as claimed by the agent."""
+        now = datetime.now(timezone.utc).isoformat()
+        for task in self._tasks.get(agent_id, []):
+            if task["task_id"] == task_id and task["status"] == "pending":
+                task["status"] = "claimed"
+                task["claimed_at"] = now
+                break
+
+    def complete_task(self, task_id: str) -> None:
+        """Mark a task as completed."""
+        now = datetime.now(timezone.utc).isoformat()
+        for agent_tasks in self._tasks.values():
+            for task in agent_tasks:
+                if task["task_id"] == task_id:
+                    task["status"] = "completed"
+                    task["completed_at"] = now
+                    return
+
+    def _get_pending_task(self, agent_id: str) -> dict | None:
+        """Return the first pending task for an agent, or None."""
+        for task in self._tasks.get(agent_id, []):
+            if task["status"] == "pending":
+                return task
+        return None

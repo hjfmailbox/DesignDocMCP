@@ -1425,7 +1425,10 @@ class CollaborationEngine:
                 self._assign_perspectives(session)
 
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Auto-advanced to {next_phase.value}")
-        self.store.update_session(session)
+            self.store.update_session(session)
+
+            # 为新阶段的所有活跃 agent 创建任务
+            self._push_tasks_for_phase(session)
 
     def _check_consensus(self, session: Session) -> None:
         round_votes = [v for v in session.consensus_votes if v.round_number == session.current_round]
@@ -1473,6 +1476,207 @@ class CollaborationEngine:
             for r in latest_rev:
                 parts.append(f"[{r.agent_id}] Revised: {r.changed_design[:200]}")
         return "\n".join(parts) if parts else "No proposals yet."
+
+    # ------------------------------------------------------------------
+    # Blocking-pull protocol: task distribution
+    # ------------------------------------------------------------------
+
+    def _push_tasks_for_phase(self, session: Session) -> None:
+        """为当前阶段的所有活跃 agent 创建任务"""
+        phase = session.current_phase
+        task_type_map: dict[DebatePhase, str] = {
+            DebatePhase.CLARIFY_IDENTIFY: "submit_assumptions",
+            DebatePhase.CLARIFY_REFINE: "supplement_assumption_options",
+            DebatePhase.CLARIFY_REWRITE: "submit_refined_requirement",
+            DebatePhase.PROPOSAL: "submit_proposal",
+            DebatePhase.CRITIC: "submit_challenge",
+            DebatePhase.REVISION: "submit_revision",
+            DebatePhase.OPTIMIZATION: "submit_optimization",
+            DebatePhase.DEVILS_ADVOCATE: "submit_devils_advocate",
+            DebatePhase.CONSENSUS: "cast_consensus_vote",
+        }
+        task_type = task_type_map.get(phase)
+        if not task_type:
+            return  # wait phases (clarify_review, human_review)
+
+        for agent in session.agents:
+            if not agent.is_active:
+                continue
+            # Devils advocate only for designated agent
+            if phase == DebatePhase.DEVILS_ADVOCATE and agent.agent_id != session.devils_advocate_agent:
+                continue
+            self.store.push_task(
+                session_id=session.session_id,
+                agent_id=agent.agent_id,
+                task_type=task_type,
+                phase=phase.value,
+                round_number=session.current_round,
+                payload=self._build_task_payload(session, agent, task_type),
+            )
+        logger.info(
+            "push_tasks_for_phase: session=%s phase=%s task_type=%s agents=%d",
+            session.session_id, phase.value, task_type,
+            len([a for a in session.agents if a.is_active]),
+        )
+
+    def _build_task_payload(self, session: Session, agent: AgentInfo, task_type: str) -> dict:
+        """构建任务上下文，包含 agent 需要的所有信息"""
+        payload: dict[str, Any] = {
+            "phase": session.current_phase.value,
+            "round": session.current_round,
+            "clarify_round": session.clarify_round,
+            "instruction": PHASE_DESCRIPTIONS.get(session.current_phase, ""),
+        }
+        if session.requirement:
+            payload["requirement"] = session.requirement.model_dump()
+        if agent.current_perspective:
+            payload["perspective"] = agent.current_perspective
+            payload["perspective_description"] = PERSPECTIVE_DESCRIPTIONS.get(agent.current_perspective, "")
+
+        # Phase-specific context
+        if task_type == "submit_challenge":
+            proposals = [
+                p.model_dump() for p in session.proposals
+                if p.round_number == session.current_round and p.agent_id != agent.agent_id
+            ]
+            payload["proposals_to_challenge"] = proposals
+        elif task_type == "submit_revision":
+            challenges_against = [
+                c.model_dump() for c in session.challenges
+                if c.target_agent_id == agent.agent_id and c.round_number == session.current_round
+            ]
+            payload["challenges_against_you"] = challenges_against
+        elif task_type == "submit_optimization":
+            revisions = [
+                r.model_dump() for r in session.revisions
+                if r.round_number == session.current_round
+            ]
+            payload["revisions"] = revisions
+        elif task_type == "submit_devils_advocate":
+            payload["design_summary"] = self._build_design_summary(session)
+        elif task_type == "cast_consensus_vote":
+            payload["design_summary"] = self._build_design_summary(session)
+        elif task_type == "submit_assumptions":
+            payload["dimensions"] = ASSUMPTION_DIMENSIONS
+        elif task_type == "supplement_assumption_options":
+            payload["merged_assumptions"] = [g.model_dump() for g in session.merged_assumptions]
+        elif task_type == "submit_refined_requirement":
+            payload["merged_assumptions"] = [g.model_dump() for g in session.merged_assumptions]
+            payload["human_choices"] = {
+                a.assumption_id: a.human_choice
+                for g in session.merged_assumptions
+                for a in g.assumptions
+                if a.human_choice
+            }
+
+        return payload
+
+    def wait_for_task_engine(self, session_id: str, agent_id: str, timeout: float = 300.0) -> dict | None:
+        """Engine 层的 wait_for_task 实现"""
+        session = self._get(session_id)
+        self._validate_agent(session, agent_id)
+        self._touch_agent(session, agent_id)
+        self.store.update_session(session)
+
+        # 先检查是否有 pending 任务
+        task = self.store.wait_for_task(agent_id, timeout)
+        if task:
+            return task
+
+        # 如果没有 pending 任务，检查当前阶段是否需要为该 agent 创建任务
+        # （可能是新加入的 agent 或阶段刚推进）
+        return None
+
+    def submit_result_engine(self, session_id: str, agent_id: str, task_id: str, result: dict) -> dict:
+        """Engine 层的 submit_result 实现
+
+        统一提交接口：标记任务完成，根据 task_type 分发到具体的提交方法，
+        检查阶段完成，返回下一个任务。
+        """
+        session = self._get(session_id)
+        self._validate_agent(session, agent_id)
+        self._touch_agent(session, agent_id)
+
+        # 标记任务完成
+        self.store.complete_task(task_id)
+
+        # 根据 task_type 分发到具体的提交方法
+        task_type = result.get("_task_type", "")
+
+        try:
+            if task_type == "submit_assumptions":
+                assumptions = result.get("assumptions", [])
+                self.submit_assumptions(session_id, agent_id, assumptions)
+            elif task_type == "supplement_assumption_options":
+                supplements = result.get("supplements", [])
+                self.supplement_assumption_options(session_id, agent_id, supplements)
+            elif task_type == "submit_refined_requirement":
+                self.submit_refined_requirement(
+                    session_id, agent_id,
+                    refined_statement=result.get("refined_statement", ""),
+                    constraints=result.get("constraints"),
+                    acceptance_criteria=result.get("acceptance_criteria"),
+                )
+            elif task_type == "submit_proposal":
+                self.submit_proposal(
+                    session_id, agent_id,
+                    architecture=result.get("architecture", ""),
+                    tech_stack=result.get("tech_stack", ""),
+                    tradeoffs=result.get("tradeoffs", ""),
+                    risks=result.get("risks", ""),
+                    assumptions=result.get("assumptions", ""),
+                    unknowns=result.get("unknowns", ""),
+                    raw_content=result.get("raw_content", ""),
+                )
+            elif task_type == "submit_challenge":
+                self.submit_challenge(
+                    session_id, agent_id,
+                    target_agent_id=result.get("target_agent_id", ""),
+                    target_proposal_id=result.get("target_proposal_id", ""),
+                    risks=result.get("risks", []),
+                    missing_considerations=result.get("missing_considerations", []),
+                    alternative_proposal=result.get("alternative_proposal", ""),
+                    category=result.get("category", "architecture"),
+                    priority=result.get("priority", "medium"),
+                    confidence=result.get("confidence", 0.5),
+                )
+            elif task_type == "submit_revision":
+                self.submit_revision(
+                    session_id, agent_id,
+                    accepted_feedback=result.get("accepted_feedback", []),
+                    rejected_feedback=result.get("rejected_feedback", []),
+                    rejection_reasons=result.get("rejection_reasons", []),
+                    changed_design=result.get("changed_design", ""),
+                )
+            elif task_type == "submit_optimization":
+                self.submit_optimization(
+                    session_id, agent_id,
+                    description=result.get("description", ""),
+                    impact=result.get("impact", ""),
+                    tradeoff=result.get("tradeoff", ""),
+                    complexity_change=result.get("complexity_change", ""),
+                )
+            elif task_type == "submit_devils_advocate":
+                self.submit_devils_advocate(
+                    session_id, agent_id,
+                    failure_modes=result.get("failure_modes", []),
+                    risk_score=result.get("risk_score", 0.5),
+                    mitigation=result.get("mitigation", ""),
+                )
+            elif task_type == "cast_consensus_vote":
+                vote_type_str = result.get("vote_type", "agree")
+                self.cast_consensus_vote(
+                    session_id, agent_id,
+                    vote_type=VoteType(vote_type_str),
+                    comment=result.get("comment", ""),
+                )
+        except ValueError as e:
+            logger.warning("submit_result_engine dispatch failed: %s", e)
+            return {"status": "error", "message": str(e)}
+
+        # 返回下一个任务
+        next_task = self.store.wait_for_task(agent_id, timeout=0.1)
+        return next_task or {"status": "no_task"}
 
     def _get(self, session_id: str) -> Session:
         session = self.store.get_session(session_id)
