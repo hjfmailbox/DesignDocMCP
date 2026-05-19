@@ -1,3 +1,4 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
@@ -6,6 +7,19 @@ dist/
 build/
 .ruff_cache/
 .pytest_cache/
+
+# Runtime data (not source)
 data/
 logs/
 .env
+
+# IDE / tool artifacts (not project config)
+.vscode/
+.specstory/
+.cursorindexingignore
+
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
+
+# AtomCode runtime artifacts
+.atomcode/graph.bin

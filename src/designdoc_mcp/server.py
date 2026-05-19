@@ -1116,6 +1116,8 @@ You are connected to a DesignDoc MCP server for multi-agent design document coll
    - Call MCP tool `get_phase_context(session_id, agent_id)`
    - Submit content for the current phase using the appropriate MCP tool
 
+**IMPORTANT**: During "wait" phases (clarify_review, human_review), you MUST still call `heartbeat` periodically (every 2-3 minutes) to prevent being marked as inactive (5-minute timeout). When the phase changes, `get_phase_context` will return the new phase.
+
 ## Commands
 - `/register` - Register to a session (auto-detects session and your info)
 - `/deregister` - Leave the current session

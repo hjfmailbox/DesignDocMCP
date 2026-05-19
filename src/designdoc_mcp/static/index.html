@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="midnight">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DesignDoc MCP</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+[data-theme="midnight"]{--bg0:#0d1117;--bg1:#161b22;--bg2:#1c2333;--bg3:#252d3a;--bd:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#6e7681;--ac:#58a6ff;--ac2:#79c0ff;--ok:#3fb950;--wn:#d29922;--er:#f85149;--bdg:#1f6feb}
+[data-theme="daylight"]{--bg0:#fff;--bg1:#f6f8fa;--bg2:#fff;--bg3:#f0f2f5;--bd:#d0d7de;--t1:#1f2328;--t2:#656d76;--t3:#8c959f;--ac:#0969da;--ac2:#0550ae;--ok:#1a7f37;--wn:#9a6700;--er:#cf222e;--bdg:#0969da}
+[data-theme="ember"]{--bg0:#1a1410;--bg1:#231c16;--bg2:#2a2118;--bg3:#352a1f;--bd:#3d3128;--t1:#f0e6d8;--t2:#a89880;--t3:#7a6e60;--ac:#e8915a;--ac2:#f0a870;--ok:#7ec699;--wn:#e8c95a;--er:#e85a5a;--bdg:#c47a3a}
+body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:8px}
+.btn{padding:6px 16px;border-radius:6px;font-size:13px;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-p{background:var(--ac);color:#fff}.btn-p:hover{background:var(--ac2)}
+.btn-s{background:var(--bg3);color:var(--t1);border:1px solid var(--bd)}.btn-s:hover{border-color:var(--ac)}
+.btn-d{background:var(--er);color:#fff}.btn-d:hover{opacity:.85}
+.btn-w{background:var(--wn);color:#000}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500}
+.b-ac{background:var(--bdg);color:#fff}.b-ok{background:var(--ok);color:#fff}
+.b-wn{background:var(--wn);color:#000}.b-er{background:var(--er);color:#fff}
+.b-ph{background:var(--bg3);color:var(--t2);border:1px solid var(--bd)}
+.tab{padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent;color:var(--t2);font-size:13px;background:none;border-top:none;border-left:none;border-right:none}
+.tab.on{color:var(--ac);border-bottom-color:var(--ac)}.tab:hover{color:var(--t1)}
+.pulse{animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot-ok{background:var(--ok)}.dot-er{background:var(--er)}.dot-wn{background:var(--wn)}
+.timeline-item{position:relative;padding-left:28px;padding-bottom:16px}
+.timeline-item::before{content:'';position:absolute;left:9px;top:20px;bottom:0;width:2px;background:var(--bd)}
+.timeline-item:last-child::before{display:none}
+.timeline-dot{position:absolute;left:3px;top:6px;width:16px;height:16px;border-radius:50%;border:2px solid var(--bd);background:var(--bg0);display:flex;align-items:center;justify-content:center}
+.timeline-dot.td-ac{border-color:var(--ac);background:var(--ac)}.timeline-dot.td-ok{border-color:var(--ok);background:var(--ok)}
+.timeline-dot.td-er{border-color:var(--er);background:var(--er)}.timeline-dot.td-wn{border-color:var(--wn);background:var(--wn)}
+.phase-bar{display:flex;align-items:center;gap:0}
+.phase-seg{height:6px;flex:1;transition:all .3s}
+.phase-seg.done{background:var(--ok)}.phase-seg.active{background:var(--ac);animation:pulse 2s infinite}.phase-seg.pending{background:var(--bd)}
+.phase-label{font-size:10px;text-align:center;color:var(--t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phase-label.active{color:var(--ac);font-weight:600}.phase-label.done{color:var(--ok)}
+.toast{position:fixed;top:20px;right:20px;z-index:1000;min-width:320px;max-width:480px;padding:16px 20px;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.3);animation:slideIn .3s ease-out;cursor:pointer}
+.toast-warn{background:linear-gradient(135deg,#d29922,#e8a817);color:#000;border:2px solid #b8860b}
+.toast-info{background:var(--bg2);color:var(--t1);border:1px solid var(--bd)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.modal-bg{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal-box{background:var(--bg2);border:2px solid var(--wn);border-radius:12px;padding:24px;max-width:560px;width:90%;box-shadow:0 16px 48px rgba(0,0,0,.4)}
+.expandable{cursor:pointer;user-select:none}.expandable:hover{background:var(--bg3);border-radius:4px}
+.agent-card{padding:10px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--bg2);transition:all .2s}
+.agent-card:hover{border-color:var(--ac)}
+.agent-card.inactive{opacity:.5}
+.scroll-y{overflow-y:auto}.scroll-y::-webkit-scrollbar{width:4px}.scroll-y::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
+.copy-btn{cursor:pointer;opacity:.6;transition:opacity .15s}.copy-btn:hover{opacity:1}
+.evt-row{padding:8px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:flex-start;gap:10px;transition:background .15s}
+.evt-row:hover{background:var(--bg3)}
+.evt-row:last-child{border-bottom:none}
+.evt-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px}
+.evt-icon.ei-system{background:var(--bg3);color:var(--t2)}
+.evt-icon.ei-register{background:rgba(88,166,255,.15);color:var(--ac)}
+.evt-icon.ei-assumption{background:rgba(210,153,34,.15);color:var(--wn)}
+.evt-icon.ei-proposal{background:rgba(88,166,255,.15);color:var(--ac)}
+.evt-icon.ei-challenge{background:rgba(248,81,73,.15);color:var(--er)}
+.evt-icon.ei-revision{background:rgba(63,185,80,.15);color:var(--ok)}
+.evt-icon.ei-optimization{background:rgba(63,185,80,.15);color:var(--ok)}
+.evt-icon.ei-risk{background:rgba(248,81,73,.15);color:var(--er)}
+.evt-icon.ei-vote{background:rgba(88,166,255,.15);color:var(--ac)}
+.evt-icon.ei-human{background:rgba(210,153,34,.15);color:var(--wn)}
+.evt-icon.ei-question{background:rgba(210,153,34,.15);color:var(--wn)}
+.evt-icon.ei-refine{background:rgba(63,185,80,.15);color:var(--ok)}
+</style>
+</head>
+<body x-data="app()" x-init="init()" class="min-h-screen">
+
+<div class="toast" :class="notif.type==='human'?'toast-warn':'toast-info'" x-show="notif.show" x-transition @click="notif.show=false" style="position:fixed;top:20px;right:20px;z-index:1000">
+  <div class="flex items-start gap-3">
+    <i class="fas" :class="notif.type==='human'?'fa-exclamation-triangle':'fa-info-circle'" class="text-lg"></i>
+    <div class="flex-1">
+      <div class="font-semibold text-sm" x-text="notif.title"></div>
+      <div class="text-xs mt-1" style="opacity:.85" x-text="notif.message"></div>
+    </div>
+    <i class="fas fa-times text-xs" style="opacity:.6"></i>
+  </div>
+</div>
+
+<div class="modal-bg" x-show="showModal" x-transition @click.self="showModal=false">
+  <div class="modal-box">
+    <div class="flex items-center gap-3 mb-4">
+      <i class="fas fa-exclamation-triangle text-2xl" style="color:var(--wn)"></i>
+      <h2 class="text-lg font-bold" x-text="modal.title"></h2>
+    </div>
+    <p class="text-sm mb-4" style="color:var(--t2)" x-text="modal.message"></p>
+    <div class="flex gap-2 justify-end">
+      <template x-for="a in modal.actions" :key="a.label">
+        <button @click="a.fn(); showModal=false" class="btn" :class="a.cls||'btn-p'" x-text="a.label"></button>
+      </template>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" x-show="showDeltaModal" x-transition @click.self="showDeltaModal=false">
+  <div class="modal-box" style="border-color:var(--ac)">
+    <div class="flex items-center gap-3 mb-4">
+      <i class="fas fa-plus-circle text-2xl" style="color:var(--ac)"></i>
+      <h2 class="text-lg font-bold">Add Supplementary Requirement</h2>
+    </div>
+    <p class="text-sm mb-3" style="color:var(--t2)">Add a supplementary requirement (delta) to the existing requirement. The system will evaluate its clarity and handle it appropriately.</p>
+    <textarea x-model="deltaText" placeholder="Describe the supplementary requirement..." rows="4" class="w-full text-sm p-2 mb-3" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--t1);outline:none;resize:vertical"></textarea>
+    <div class="flex gap-2 justify-end">
+      <button @click="showDeltaModal=false;deltaText=''" class="btn btn-s">Cancel</button>
+      <button @click="submitDelta()" class="btn btn-p" :disabled="!deltaText">Submit Delta</button>
+    </div>
+  </div>
+</div>
+
+<nav class="flex items-center justify-between px-5 py-2.5" style="background:var(--bg1);border-bottom:1px solid var(--bd)">
+  <div class="flex items-center gap-3">
+    <i class="fas fa-comments" style="color:var(--ac);font-size:18px"></i>
+    <span class="font-semibold">DesignDoc MCP</span>
+    <span class="dot" :class="sseOn?'dot-ok':'dot-er'" :title="sseOn?'SSE Connected':'SSE Disconnected'"></span>
+  </div>
+  <div class="flex items-center gap-2">
+    <button @click="soundOn=!soundOn; localStorage.setItem('dd-sound',soundOn)" class="btn btn-s text-xs" :title="soundOn?'Sound ON':'Sound OFF'">
+      <i class="fas" :class="soundOn?'fa-volume-up':'fa-volume-mute'"></i>
+    </button>
+    <span class="text-xs" style="color:var(--t3)">Theme</span>
+    <button @click="setTheme('midnight')" class="btn btn-s text-xs" :style="theme==='midnight'?'border-color:var(--ac)':''">🌙</button>
+    <button @click="setTheme('daylight')" class="btn btn-s text-xs" :style="theme==='daylight'?'border-color:var(--ac)':''">☀️</button>
+    <button @click="setTheme('ember')" class="btn btn-s text-xs" :style="theme==='ember'?'border-color:var(--ac)':''">🔥</button>
+  </div>
+</nav>
+
+<div class="flex" style="height:calc(100vh - 44px)">
+
+<aside class="w-64 scroll-y p-3" style="background:var(--bg1);border-right:1px solid var(--bd)">
+  <div class="flex items-center justify-between mb-2">
+    <span class="font-semibold text-xs uppercase" style="color:var(--t3)">Sessions</span>
+    <div class="flex gap-1">
+      <button @click="showCreateForm=!showCreateForm" class="text-xs" style="color:var(--ac);cursor:pointer" title="New Session"><i class="fas fa-plus"></i></button>
+      <button @click="loadSessions()" class="text-xs" style="color:var(--ac);cursor:pointer"><i class="fas fa-sync-alt"></i></button>
+    </div>
+  </div>
+  <div class="flex gap-1 mb-2">
+    <button @click="sessionFilter='active'" class="text-xs px-2 py-0.5" :style="sessionFilter==='active'?'color:var(--ac);border-bottom:2px solid var(--ac)':'color:var(--t3);border-bottom:2px solid transparent'">Active</button>
+    <button @click="sessionFilter='archived'" class="text-xs px-2 py-0.5" :style="sessionFilter==='archived'?'color:var(--ac);border-bottom:2px solid var(--ac)':'color:var(--t3);border-bottom:2px solid transparent'">Archived</button>
+    <button @click="sessionFilter='all'" class="text-xs px-2 py-0.5" :style="sessionFilter==='all'?'color:var(--ac);border-bottom:2px solid var(--ac)':'color:var(--t3);border-bottom:2px solid transparent'">All</button>
+  </div>
+  <div x-show="showCreateForm" x-transition class="card p-3 mb-2">
+    <input x-model="newSession.title" placeholder="Session title *" class="w-full text-sm p-1.5 mb-1.5" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--t1);outline:none">
+    <textarea x-model="newSession.description" placeholder="Description (optional)" rows="2" class="w-full text-sm p-1.5 mb-1.5" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--t1);outline:none;resize:vertical"></textarea>
+    <div class="text-xs mb-1" style="color:var(--t3)">Requirement:</div>
+    <textarea x-model="newSession.problem_statement" placeholder="Type requirement here, or upload a file below..." rows="3" class="w-full text-sm p-1.5 mb-1.5" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--t1);outline:none;resize:vertical"></textarea>
+    <div class="flex items-center gap-2 mb-1.5">
+      <label class="btn btn-s text-xs cursor-pointer flex-1" style="justify-content:center">
+        <i class="fas fa-upload"></i> Upload File
+        <input type="file" @change="handleFileUpload($event)" accept=".md,.txt,.pdf,.doc,.docx" class="hidden">
+      </label>
+      <span x-show="newSession.fileName" class="text-xs truncate" style="color:var(--ok);max-width:100px" x-text="newSession.fileName"></span>
+    </div>
+    <div class="flex gap-1">
+      <button @click="createSession()" class="btn btn-p text-xs flex-1">Create</button>
+      <button @click="showCreateForm=false;newSession={title:'',description:'',problem_statement:'',fileName:'',fileContent:''}" class="btn btn-s text-xs">Cancel</button>
+    </div>
+  </div>
+  <template x-for="ss in filteredSessions" :key="ss.session_id">
+    <div class="card p-2.5 mb-1.5 cursor-pointer group" :style="sid===ss.session_id?'border-color:var(--ac)':''" @click="selectSession(ss.session_id)">
+      <div class="flex items-start justify-between">
+        <div class="font-medium text-sm truncate flex-1 min-w-0" x-text="ss.title"></div>
+        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1">
+          <button @click.stop="confirmDelete(ss.session_id, ss.title)" class="text-xs" style="color:var(--er);cursor:pointer" title="Delete"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 mt-1">
+        <span class="badge b-ph" x-text="ss.phase"></span>
+        <span class="text-xs" style="color:var(--t3)" x-text="'R'+ss.round"></span>
+        <span x-show="ss.needs_human" class="badge b-wn text-xs">!</span>
+      </div>
+      <div class="flex items-center gap-1.5 mt-1">
+        <span x-show="ss.status==='created'&&!ss.clarity_score" class="text-xs" style="color:var(--wn)"><i class="fas fa-file-circle-question"></i> No requirement</span>
+        <span x-show="ss.status==='created'&&ss.clarity_score&&ss.agents.length<2" class="text-xs" style="color:var(--wn)"><i class="fas fa-user-plus"></i> Need agents</span>
+        <span x-show="ss.status==='created'&&ss.clarity_score&&ss.agents.length>=2" class="text-xs" style="color:var(--ok)"><i class="fas fa-play-circle"></i> Ready</span>
+        <span x-show="ss.status==='archived'" class="text-xs" style="color:var(--t3)"><i class="fas fa-archive"></i> Archived</span>
+        <template x-for="a in ss.agents" :key="a.agent_id">
+          <span class="dot" :class="a.is_active?'dot-ok':'dot-er'" :title="a.name+(a.model?' ('+a.model+')':'')"></span>
+        </template>
+      </div>
+    </div>
+  </template>
+  <div x-show="filteredSessions.length===0&&!showCreateForm" class="text-center py-8" style="color:var(--t3)">
+    <i class="fas fa-inbox text-2xl mb-2"></i>
+    <p class="text-sm" x-text="sessionFilter==='archived'?'No archived sessions':'No sessions'"></p>
+    <p x-show="sessionFilter!=='archived'" class="text-xs mt-1">Click + to create one</p>
+  </div>
+</aside>
+
+<main class="flex-1 scroll-y">
+<template x-if="!s">
+  <div class="flex items-center justify-center h-full" style="color:var(--t3)">
+    <div class="text-center">
+      <i class="fas fa-hand-pointer text-4xl mb-4"></i>
+      <p class="text-lg">Select a session</p>
+    </div>
+  </div>
+</template>
+
+<template x-if="s">
+<div class="p-5">
+
+<div class="flex items-start justify-between mb-4">
+  <div class="flex-1 min-w-0">
+    <h1 class="text-xl font-bold" x-text="s.title"></h1>
+    <div class="flex items-center gap-2 mt-1 flex-wrap">
+      <span class="badge" :class="s.status==='completed'?'b-ok':s.status==='human_review'?'b-wn':s.status==='archived'?'b-ph':'b-ac'" x-text="s.status"></span>
+      <span class="badge b-ac" x-text="s.phase"></span>
+      <span class="text-xs" style="color:var(--t3)" x-text="'Round '+s.round+'/'+s.max_rounds"></span>
+    </div>
+    <div class="flex items-center gap-2 mt-2">
+      <span class="text-xs" style="color:var(--t3)">Session ID:</span>
+      <code class="text-xs px-2 py-0.5" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--ac);font-family:monospace" x-text="s.session_id"></code>
+      <button @click="copyToClipboard(s.session_id)" class="copy-btn text-xs" style="color:var(--ac)" title="Copy Session ID"><i class="fas fa-copy"></i></button>
+      <span class="text-xs" style="color:var(--t3)">→ tell agents: <code style="color:var(--ac)">/register <span x-text="s.session_id"></span></code></span>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 flex-shrink-0">
+    <div x-show="s.needs_human" class="pulse">
+      <button @click="tab='decisions'" class="btn btn-w"><i class="fas fa-exclamation-triangle"></i> Action Required</button>
+    </div>
+    <div x-show="canStart" class="pulse">
+      <button @click="startDiscussion()" class="btn btn-p"><i class="fas fa-play"></i> Start Discussion</button>
+    </div>
+  </div>
+</div>
+
+<div class="phase-bar mb-1">
+  <template x-for="(p,i) in (s.phase_progress||[])" :key="p.key">
+    <div class="phase-seg" :class="p.status" :style="i===0?'border-radius:3px 0 0 3px':''+(i===(s.phase_progress||[]).length-1?'border-radius:0 3px 3px 0':'')"></div>
+  </template>
+</div>
+<div class="flex mb-4" style="margin-top:-2px">
+  <template x-for="p in (s.phase_progress||[])" :key="p.key">
+    <div class="phase-label" :class="p.status" x-text="p.label" style="flex:1"></div>
+  </template>
+</div>
+
+<div class="flex gap-1 mb-4" style="border-bottom:1px solid var(--bd)">
+  <button @click="tab='agents'" class="tab" :class="tab==='agents'?'on':''"><i class="fas fa-robot mr-1"></i>Agents</button>
+  <button @click="tab='activity'" class="tab" :class="tab==='activity'?'on':''">
+    <i class="fas fa-stream mr-1"></i>Activity
+    <span x-show="liveEvents.length>0" class="badge b-ac text-xs ml-1" x-text="liveEvents.length"></span>
+  </button>
+  <button @click="tab='flow'" class="tab" :class="tab==='flow'?'on':''"><i class="fas fa-project-diagram mr-1"></i>Flow</button>
+  <button @click="tab='decisions'" class="tab" :class="tab==='decisions'?'on':''">
+    <i class="fas fa-gavel mr-1"></i>Decisions
+    <span x-show="s.needs_human" class="badge b-er ml-1 text-xs">!</span>
+  </button>
+  <button @click="tab='document'" class="tab" :class="tab==='document'?'on':''"><i class="fas fa-file-alt mr-1"></i>Document</button>
+  <div class="ml-auto flex items-center gap-1 pb-1">
+    <button x-show="s.status==='completed'" @click="apiCall('/generate-document',{})" class="btn btn-s text-xs"><i class="fas fa-file-export"></i> Generate Doc</button>
+    <button x-show="s.status==='completed'" @click="confirmArchive()" class="btn btn-s text-xs"><i class="fas fa-archive"></i> Archive</button>
+    <button x-show="isInClarify" @click="apiCall('/force-skip-clarification',{})" class="btn btn-s text-xs"><i class="fas fa-forward"></i> Skip Clarification</button>
+    <button x-show="s.requirement&&s.status!=='archived'&&s.status!=='completed'" @click="showDeltaModal=true" class="btn btn-s text-xs"><i class="fas fa-plus-circle"></i> Add Delta</button>
+    <button x-show="s.status!=='archived'" @click="confirmDelete(s.session_id, s.title)" class="btn btn-s text-xs" style="color:var(--er)"><i class="fas fa-trash"></i></button>
+  </div>
+</div>
+
+<div x-show="tab==='agents'">
+  <div class="grid grid-cols-3 gap-4">
+    <div class="col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold" style="color:var(--t2)"><i class="fas fa-robot mr-1"></i>Registered Agents <span class="badge b-ph text-xs ml-1" x-text="s.agents.length"></span></h3>
+        <div x-show="s.agents.length<2&&s.status==='created'" class="text-xs" style="color:var(--wn)"><i class="fas fa-info-circle"></i> Need at least 2 agents to start</div>
+      </div>
+      <div class="space-y-2">
+        <template x-for="a in s.agents" :key="a.agent_id">
+          <div class="agent-card" :class="a.is_active?'':'inactive'">
+            <div class="flex items-center gap-3">
+              <div class="dot" :class="a.is_active?'dot-ok':'dot-er'"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-sm" x-text="a.name"></span>
+                  <span x-show="a.model" class="text-xs" style="color:var(--t3)" x-text="'('+a.model+')'"></span>
+                  <span x-show="a.provider" class="badge b-ph text-xs" x-text="a.provider"></span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span x-show="a.perspective" class="badge b-ac text-xs" x-text="a.perspective"></span>
+                  <span class="text-xs" style="color:var(--t3)" x-text="a.is_active?'Active · '+a.last_active_ago:'Offline · '+a.last_active_ago"></span>
+                </div>
+              </div>
+              <span x-show="!a.is_active" class="badge b-er text-xs">OFFLINE</span>
+            </div>
+          </div>
+        </template>
+        <div x-show="s.agents.length===0" class="text-center py-6" style="color:var(--t3)">
+          <i class="fas fa-user-slash text-2xl mb-2"></i>
+          <p class="text-sm">No agents registered yet</p>
+          <p class="text-xs mt-1">Use <code style="color:var(--ac)">/register <span x-text="s.session_id"></span></code> in your agent to join</p>
+        </div>
+    </div>
+    <div>
+      <h3 class="text-sm font-semibold mb-3" style="color:var(--t2)"><i class="fas fa-file-lines mr-1"></i>Requirement</h3>
+      <div class="card p-3">
+        <template x-if="s.requirement">
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs" style="color:var(--t3)">Clarity:</span>
+              <div class="flex-1 h-2 rounded-full" style="background:var(--bg3)">
+                <div class="h-2 rounded-full" :style="'width:'+s.requirement.clarity_score*100+'%;background:'+(s.requirement.clarity_score>=0.7?'var(--ok)':'var(--wn)')"></div>
+              </div>
+              <span class="text-xs font-mono" x-text="(s.requirement.clarity_score*100).toFixed(0)+'%'"></span>
+            </div>
+            <div class="mb-2">
+              <span x-show="s.requirement.skip_clarification" class="text-xs" style="color:var(--ok)"><i class="fas fa-check-circle"></i> Clear enough - clarification will be skipped</span>
+              <span x-show="!s.requirement.skip_clarification&&s.requirement.clarity_score>0" class="text-xs" style="color:var(--wn)"><i class="fas fa-info-circle"></i> Needs clarification before debate</span>
+            </div>
+            <p class="text-xs" style="color:var(--t2);max-height:120px;overflow-y:auto;white-space:pre-wrap" x-text="s.requirement.problem_statement"></p>
+            <div x-show="s.requirement.constraints.length" class="mt-2">
+              <span class="text-xs" style="color:var(--t3)">Constraints:</span>
+              <template x-for="c in s.requirement.constraints" :key="c">
+                <span class="badge b-ph text-xs ml-1" x-text="c"></span>
+              </template>
+            </div>
+          </div>
+        </template>
+        <div x-show="!s.requirement" class="text-center py-4" style="color:var(--t3)">
+          <p class="text-xs">No requirement submitted</p>
+          <button @click="showUploadModal=true" class="btn btn-s text-xs mt-2"><i class="fas fa-upload"></i> Upload</button>
+        </div>
+      </div>
+      <div x-show="!s.requirement&&s.status==='created'" class="card p-3 mt-2">
+        <h4 class="text-xs font-semibold mb-2" style="color:var(--t3)"><i class="fas fa-paste mr-1"></i>Submit Requirement</h4>
+        <textarea x-model="reqText" placeholder="Paste requirement text..." rows="4" class="w-full text-sm p-1.5 mb-1.5" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--t1);outline:none;resize:vertical"></textarea>
+        <div class="flex gap-1">
+          <button @click="submitRequirement()" class="btn btn-p text-xs flex-1" :disabled="!reqText">Submit</button>
+          <label class="btn btn-s text-xs cursor-pointer">
+            <i class="fas fa-upload"></i>
+            <input type="file" @change="handleReqFileUpload($event)" accept=".md,.txt" class="hidden">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div x-show="tab==='activity'">
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="text-sm font-semibold" style="color:var(--t2)"><i class="fas fa-stream mr-1"></i>Activity Feed</h3>
+    <div class="flex items-center gap-2">
+      <select x-model="evtFilter" class="text-xs p-1" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--t1);outline:none">
+        <option value="all">All events</option>
+        <option value="agents">Agent activity</option>
+        <option value="submissions">Submissions</option>
+        <option value="system">System events</option>
+        <option value="human">Human decisions</option>
+      </select>
+      <button @click="liveEvents=[]" class="btn btn-s text-xs" x-show="liveEvents.length>0"><i class="fas fa-broom"></i> Clear live</button>
+    </div>
+  </div>
+  <div class="card" style="max-height:calc(100vh - 260px);overflow-y:auto">
+    <div x-show="filteredEvents.length===0" class="text-center py-8" style="color:var(--t3)">
+      <i class="fas fa-clock-rotate-left text-2xl mb-2"></i>
+      <p class="text-sm">No activity yet</p>
+      <p class="text-xs mt-1">Events will appear here as agents register and participate</p>
+    </div>
+    <template x-for="e in filteredEvents" :key="e.event_id">
+      <div class="evt-row">
+        <div class="evt-icon" :class="evtIconClass(e.type)">
+          <i class="fas" :class="evtIconFA(e.type)"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm" x-text="evtSourceLabel(e)"></span>
+            <span class="badge text-xs" :class="evtBadgeClass(e.type)" x-text="e.type.replace(/_/g,' ')"></span>
+            <span x-show="e.phase" class="badge b-ph text-xs" x-text="e.phase"></span>
+            <span x-show="e.round" class="text-xs" style="color:var(--t3)" x-text="'R'+e.round"></span>
+          </div>
+          <p class="text-xs mt-0.5" style="color:var(--t2)" x-text="e.content"></p>
+        </div>
+        <div class="flex-shrink-0 text-xs" style="color:var(--t3)" x-text="evtTimeAgo(e.created_at)"></div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<div x-show="tab==='flow'">
+  <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot td-ac"><i class="fas fa-lightbulb text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Proposals</span>
+      <span class="badge b-ac text-xs" x-text="s.proposals.length"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-2">
+      <template x-for="p in s.proposals" :key="p.proposal_id">
+        <div class="card p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-medium text-sm" x-text="agentName(p.agent_id)"></span>
+            <span x-show="p.perspective" class="badge b-ac text-xs" x-text="p.perspective"></span>
+            <span class="badge b-ph text-xs" x-text="'R'+p.round"></span>
+          </div>
+          <p class="text-sm" style="color:var(--t2)" x-text="p.architecture"></p>
+          <p x-show="p.tech_stack" class="text-xs mt-1" style="color:var(--t3)" x-text="'Stack: '+p.tech_stack"></p>
+          <p x-show="p.tradeoffs" class="text-xs mt-1" style="color:var(--wn)" x-text="'Tradeoffs: '+p.tradeoffs"></p>
+        </div>
+      </template>
+      <div x-show="s.proposals.length===0" class="text-center py-3" style="color:var(--t3)"><p class="text-sm">No proposals yet</p></div>
+    </div>
+  </div>
+
+  <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot td-er"><i class="fas fa-bolt text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Challenges</span>
+      <span class="badge b-er text-xs" x-text="s.challenges.length"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-2">
+      <template x-for="c in s.challenges" :key="c.challenge_id">
+        <div class="card p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-medium text-sm" x-text="agentName(c.agent_id)+' → '+agentName(c.target_agent_id)"></span>
+            <span class="badge" :class="c.priority==='critical'?'b-er':c.priority==='high'?'b-wn':'b-ph'" x-text="c.priority"></span>
+            <span class="badge b-ph text-xs" x-text="c.category"></span>
+          </div>
+          <div x-show="c.risks.length" class="mt-1">
+            <template x-for="r in c.risks" :key="r">
+              <span class="badge b-er text-xs mr-1 mb-1" x-text="'⚠ '+r"></span>
+            </template>
+          </div>
+          <div x-show="c.missing_considerations.length" class="mt-1">
+            <template x-for="m in c.missing_considerations" :key="m">
+              <span class="badge b-wn text-xs mr-1 mb-1" x-text="'❓ '+m"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+      <div x-show="s.challenges.length===0" class="text-center py-3" style="color:var(--t3)"><p class="text-sm">No challenges yet</p></div>
+    </div>
+  </div>
+
+  <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot td-ok"><i class="fas fa-wrench text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Revisions</span>
+      <span class="badge b-ok text-xs" x-text="s.revisions.length"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-2">
+      <template x-for="r in s.revisions" :key="r.revision_id">
+        <div class="card p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-medium text-sm" x-text="agentName(r.agent_id)"></span>
+            <span class="badge b-ph text-xs" x-text="'R'+r.round"></span>
+          </div>
+          <p class="text-sm" style="color:var(--t2)" x-text="r.changed_design"></p>
+          <div x-show="r.accepted_feedback.length" class="mt-1">
+            <span class="text-xs" style="color:var(--ok)">Accepted:</span>
+            <template x-for="f in r.accepted_feedback" :key="f"><span class="badge b-ok text-xs mr-1" x-text="f"></span></template>
+          </div>
+        </div>
+      </template>
+      <div x-show="s.revisions.length===0" class="text-center py-3" style="color:var(--t3)"><p class="text-sm">No revisions yet</p></div>
+    </div>
+  </div>
+
+  <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot td-ok"><i class="fas fa-arrow-up text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Optimizations</span>
+      <span class="badge b-ok text-xs" x-text="s.optimizations.length"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-2">
+      <template x-for="o in s.optimizations" :key="o.optimization_id">
+        <div class="card p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-medium text-sm" x-text="agentName(o.agent_id)"></span>
+          </div>
+          <p class="text-sm" style="color:var(--t2)" x-text="o.description"></p>
+          <p x-show="o.impact" class="text-xs mt-1" style="color:var(--ok)" x-text="'Impact: '+o.impact"></p>
+        </div>
+      </template>
+      <div x-show="s.optimizations.length===0" class="text-center py-3" style="color:var(--t3)"><p class="text-sm">No optimizations yet</p></div>
+    </div>
+  </div>
+
+  <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot td-wn"><i class="fas fa-fire text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Devil's Advocate</span>
+      <span class="badge b-wn text-xs" x-text="s.devils_advocates.length"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-2">
+      <template x-for="d in s.devils_advocates" :key="d.da_id">
+        <div class="card p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-medium text-sm" x-text="agentName(d.agent_id)"></span>
+            <span class="badge" :class="d.risk_score>=0.7?'b-er':'b-wn'" x-text="'Risk: '+(d.risk_score*100).toFixed(0)+'%'"></span>
+          </div>
+          <template x-for="fm in d.failure_modes" :key="fm">
+            <div class="badge b-er text-xs mr-1 mb-1" x-text="'💀 '+fm"></div>
+          </template>
+          <p x-show="d.mitigation" class="text-xs mt-1" style="color:var(--ok)" x-text="'Mitigation: '+d.mitigation"></p>
+        </div>
+      </template>
+      <div x-show="s.devils_advocates.length===0" class="text-center py-3" style="color:var(--t3)"><p class="text-sm">No DA analysis yet</p></div>
+    </div>
+  </div>
+
+  <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot" :class="voteResult==='agree'?'td-ok':voteResult==='disagree'?'td-er':'td-wn'"><i class="fas fa-vote-yea text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Consensus Votes</span>
+      <span class="badge text-xs" :class="voteResult==='agree'?'b-ok':voteResult==='disagree'?'b-er':'b-wn'" x-text="s.votes.length+' votes'"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-1">
+      <template x-for="v in s.votes" :key="v.agent_id+v.vote_type+v.round">
+        <div class="flex items-center gap-2 p-2" style="background:var(--bg3);border-radius:6px">
+          <i class="fas" :class="v.vote_type==='agree'?'fa-check-circle':v.vote_type==='disagree'?'fa-times-circle':'fa-question-circle'" :style="'color:'+(v.vote_type==='agree'?'var(--ok)':v.vote_type==='disagree'?'var(--er)':'var(--wn)')"></i>
+          <span class="text-sm" x-text="agentName(v.agent_id)"></span>
+          <span class="badge text-xs" :class="v.vote_type==='agree'?'b-ok':v.vote_type==='disagree'?'b-er':'b-wn'" x-text="v.vote_type"></span>
+          <span x-show="v.comment" class="text-xs ml-auto" style="color:var(--t3)" x-text="v.comment"></span>
+        </div>
+      </template>
+      <div x-show="s.votes.length===0" class="text-center py-3" style="color:var(--t3)"><p class="text-sm">No votes yet</p></div>
+    </div>
+  </div>
+</div>
+
+<div x-show="tab==='decisions'">
+  <div x-show="!s.needs_human" class="card p-8 text-center" style="color:var(--t3)">
+    <i class="fas fa-check-circle text-3xl mb-3" style="color:var(--ok)"></i>
+    <p class="text-lg">No pending decisions</p>
+    <p class="text-sm mt-1">You will be notified when human input is needed.</p>
+  </div>
+  <div x-show="s.needs_human" class="space-y-4">
+    <div x-show="s.human_actions.includes('review_assumptions')" class="card p-4">
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-list-check" style="color:var(--wn)"></i> Review Assumptions</h3>
+      <template x-for="(g, gi) in s.merged_assumptions" :key="'a'+gi">
+        <div class="mb-3 p-3" style="background:var(--bg3);border-radius:6px">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="font-medium text-sm" x-text="g.dimension"></span>
+            <span x-show="g.divergent" class="badge b-wn text-xs">Divergent</span>
+          </div>
+          <template x-for="a in g.assumptions.filter(x=>!x.human_choice)" :key="a.assumption_id">
+            <div class="ml-3 mb-2">
+              <p class="text-sm mb-1" x-text="a.assumption"></p>
+              <div class="flex flex-wrap gap-1">
+                <template x-for="alt in a.alternatives" :key="alt.label">
+                  <button @click="apiCall('/review-assumptions',{choices:[{assumption_id:a.assumption_id,choice:alt.label}]})" class="btn btn-s text-xs" x-text="alt.label" :title="alt.description"></button>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+    <div x-show="s.human_actions.includes('approve_refined_requirement')" class="card p-4">
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-file-signature" style="color:var(--wn)"></i> Approve Refined Requirement</h3>
+      <template x-for="r in s.refined_requirements" :key="r.refine_id">
+        <div class="p-3 mb-2" style="background:var(--bg3);border-radius:6px">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <span class="text-xs" style="color:var(--t3)" x-text="'by '+agentName(r.agent_id)"></span>
+              <p class="text-sm mt-1" style="color:var(--t2);max-height:120px;overflow-y:auto" x-text="r.refined_statement"></p>
+            </div>
+            <button @click="apiCall('/approve-refined-requirement',{refine_id:r.refine_id})" class="btn btn-p text-xs flex-shrink-0">Approve</button>
+          </div>
+        </div>
+      </template>
+    </div>
+    <div x-show="s.human_actions.includes('resolve_questions')" class="card p-4">
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-question-circle" style="color:var(--wn)"></i> Resolve Questions</h3>
+      <template x-for="q in s.pending_questions" :key="q.question_id">
+        <div class="p-3 mb-2" style="background:var(--bg3);border-radius:6px">
+          <p class="text-sm font-medium mb-2" x-text="q.question"></p>
+          <div class="flex flex-wrap gap-1">
+            <template x-for="o in q.options" :key="o.label">
+              <button @click="apiCall('/resolve-question',{question_id:q.question_id,choice:o.label})" class="btn btn-s text-xs" x-text="o.label" :title="o.description"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+    <div x-show="s.human_actions.includes('review_debate')" class="card p-4">
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-gavel" style="color:var(--wn)"></i> Debate Review Required</h3>
+      <p class="text-sm mb-3" style="color:var(--t2)">Consensus could not be reached. Please review and decide.</p>
+      <div class="flex gap-2">
+        <button @click="apiCall('/human-decision',{action:'approve',reason:'Approved via Web UI'})" class="btn btn-p"><i class="fas fa-check"></i>Approve</button>
+        <button @click="apiCall('/human-decision',{action:'reject',reason:'Rejected via Web UI'})" class="btn btn-d"><i class="fas fa-times"></i>Reject</button>
+        <button @click="showOverrideModal()" class="btn btn-s"><i class="fas fa-edit"></i>Override</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div x-show="tab==='document'">
+  <div class="card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold" style="color:var(--t2)">Generated Document</h3>
+      <div class="flex gap-1">
+        <button @click="loadDoc()" class="btn btn-s text-xs"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+        <button @click="apiCall('/generate-document',{})" class="btn btn-p text-xs"><i class="fas fa-file-export mr-1"></i>Generate</button>
+      </div>
+    </div>
+    <div x-show="docContent" class="text-sm" style="color:var(--t2);white-space:pre-wrap;max-height:600px;overflow-y:auto" x-text="docContent"></div>
+    <div x-show="!docContent" class="text-center py-8" style="color:var(--t3)">
+      <p class="text-sm">Document not yet generated</p>
+      <p class="text-xs mt-1">Click Generate after the debate is complete</p>
+    </div>
+  </div>
+</div>
+
+</div>
+</template>
+</main>
+</div>
+
+<script>
+function app(){
+  return {
+    theme:localStorage.getItem('dd-theme')||'midnight',
+    sessions:[],sid:null,s:null,tab:'agents',
+    sseOn:false,sseSrc:null,docContent:'',
+    notif:{show:false,type:'info',title:'',message:''},
+    showModal:false,modal:{title:'',message:'',actions:[]},
+    soundOn:localStorage.getItem('dd-sound')!=='false',
+    showCreateForm:false,
+    sessionFilter:'active',
+    showDeltaModal:false,
+    deltaText:'',
+    newSession:{title:'',description:'',problem_statement:'',fileName:'',fileContent:''},
+    reqText:'',
+    liveEvents:[],
+    evtFilter:'all',
+    get filteredSessions(){
+      if(this.sessionFilter==='archived')return this.sessions.filter(s=>s.status==='archived');
+      if(this.sessionFilter==='active')return this.sessions.filter(s=>s.status!=='archived');
+      return this.sessions;
+    },
+    get canStart(){
+      if(!this.s)return false;
+      return this.s.status==='created'&&this.s.requirement&&this.s.agents.length>=2;
+    },
+    get isInClarify(){
+      if(!this.s)return false;
+      return['clarify_identify','clarify_refine','clarify_review','clarify_rewrite'].includes(this.s.phase);
+    },
+    get voteResult(){
+      if(!this.s||!this.s.votes.length)return'';
+      const last=this.s.votes.filter(v=>v.round===this.s.round);
+      if(!last.length)return'';
+      if(last.every(v=>v.vote_type==='agree'))return'agree';
+      if(last.some(v=>v.vote_type==='disagree'))return'disagree';
+      return'pending';
+    },
+    get filteredEvents(){
+      const hist=this.s?this.s.events||[]:[];
+      const all=[...this.liveEvents,...hist];
+      const seen=new Set();
+      const dedup=[];
+      for(const e of all){
+        if(!seen.has(e.event_id)){seen.add(e.event_id);dedup.push(e)}
+      }
+      dedup.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      if(this.evtFilter==='all')return dedup;
+      if(this.evtFilter==='agents')return dedup.filter(e=>['system_event'].includes(e.type)&&(e.content||'').match(/agent/i));
+      if(this.evtFilter==='submissions')return dedup.filter(e=>['proposal','challenge','revision','optimization','assumption','assumption_supplement','consensus_vote','requirement_refine','risk'].includes(e.type));
+      if(this.evtFilter==='system')return dedup.filter(e=>e.type==='system_event');
+      if(this.evtFilter==='human')return dedup.filter(e=>e.type==='human_decision');
+      return dedup;
+    },
+    init(){
+      this.setTheme(this.theme);
+      this.loadSessions();
+      setInterval(()=>this.loadSessions(),8000);
+      if('Notification'in window&&Notification.permission==='default'){
+        Notification.requestPermission();
+      }
+    },
+    setTheme(t){this.theme=t;document.documentElement.setAttribute('data-theme',t);localStorage.setItem('dd-theme',t)},
+    async loadSessions(){
+      try{const r=await fetch('/api/sessions');this.sessions=await r.json();
+        if(this.sid)await this.loadDetail(this.sid);
+        else if(!this.sid){
+          const active=this.sessions.filter(s=>s.status!=='archived'&&s.status!=='completed');
+          if(active.length===1)await this.selectSession(active[0].session_id);
+        }
+      }catch(e){console.error(e)}
+    },
+    async selectSession(id){this.sid=id;this.tab='agents';this.docContent='';this.liveEvents=[];await this.loadDetail(id);this.connectSSE(id)},
+    async loadDetail(id){
+      try{const r=await fetch('/api/sessions/'+id);this.s=await r.json();
+        if(this.s.needs_human&&this.tab==='agents')this.tab='decisions';
+      }catch(e){console.error(e)}
+    },
+    async loadDoc(){
+      if(!this.sid)return;
+      try{const r=await fetch('/api/sessions/'+this.sid+'/document');const d=await r.json();this.docContent=d.document||''}catch(e){console.error(e)}
+    },
+    handleFileUpload(e){
+      const file=e.target.files[0];if(!file)return;
+      this.newSession.fileName=file.name;
+      const reader=new FileReader();
+      reader.onload=(ev)=>{
+        this.newSession.problem_statement=ev.target.result;
+        this.newSession.fileContent=ev.target.result;
+      };
+      reader.readAsText(file);
+    },
+    handleReqFileUpload(e){
+      const file=e.target.files[0];if(!file)return;
+      const reader=new FileReader();
+      reader.onload=(ev)=>{this.reqText=ev.target.result};
+      reader.readAsText(file);
+    },
+    async createSession(){
+      if(!this.newSession.title)return;
+      try{
+        const r=await fetch('/api/sessions/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.newSession)});
+        const data=await r.json();
+        if(data.session_id){
+          const sid=data.session_id;
+          if(this.newSession.problem_statement){
+            await fetch('/api/sessions/'+sid+'/submit-requirement',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({problem_statement:this.newSession.problem_statement})});
+          }
+          this.newSession={title:'',description:'',problem_statement:'',fileName:'',fileContent:''};
+          this.showCreateForm=false;
+          await this.loadSessions();
+          await this.selectSession(sid);
+        }
+      }catch(e){console.error(e)}
+    },
+    async submitRequirement(){
+      if(!this.reqText||!this.sid)return;
+      try{
+        await fetch('/api/sessions/'+this.sid+'/submit-requirement',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({problem_statement:this.reqText})});
+        this.reqText='';
+        await this.loadDetail(this.sid);
+      }catch(e){console.error(e)}
+    },
+    async startDiscussion(){
+      if(!this.sid)return;
+      try{
+        await fetch('/api/sessions/'+this.sid+'/start-clarification',{method:'POST',headers:{'Content-Type':'application/json'}});
+        await this.loadDetail(this.sid);
+      }catch(e){console.error(e)}
+    },
+    async submitDelta(){
+      if(!this.deltaText||!this.sid)return;
+      try{
+        const r=await fetch('/api/sessions/'+this.sid+'/add-requirement-delta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delta_statement:this.deltaText})});
+        const data=await r.json();
+        this.deltaText='';
+        this.showDeltaModal=false;
+        if(data.action){
+          this.showNotif('info','Delta Added',data.message||('Action: '+data.action));
+        }
+        await this.loadDetail(this.sid);
+      }catch(e){console.error(e)}
+    },
+    confirmDelete(id,title){
+      const isActive=this.s&&this.s.session_id===id&&!['created','completed','archived'].includes(this.s.status);
+      this.modal={title:'Delete Session',message:isActive?'Session "'+title+'" is currently ACTIVE. Deleting it will discard all progress. Are you sure?':'Are you sure you want to delete "'+title+'"? This cannot be undone.',actions:[
+        {label:'Cancel',cls:'btn-s',fn:()=>{}},
+        {label:'Delete',cls:'btn-d',fn:async()=>{await fetch('/api/sessions/'+id,{method:'DELETE'});if(this.sid===id){this.sid=null;this.s=null}await this.loadSessions()}}
+      ]};
+      this.showModal=true;
+    },
+    confirmArchive(){
+      this.modal={title:'Archive Session',message:'Archive this session? Data will be moved to archive directory.',actions:[
+        {label:'Cancel',cls:'btn-s',fn:()=>{}},
+        {label:'Archive',cls:'btn-p',fn:async()=>{await fetch('/api/sessions/'+this.sid+'/archive',{method:'POST'});await this.loadDetail(this.sid);await this.loadSessions()}}
+      ]};
+      this.showModal=true;
+    },
+    copyToClipboard(text){
+      navigator.clipboard.writeText(text).then(()=>{this.showNotif('info','Copied','Session ID copied to clipboard')}).catch(()=>{});
+    },
+    connectSSE(id){
+      if(this.sseSrc)this.sseSrc.close();
+      this.sseSrc=new EventSource('/api/sessions/'+id+'/events');
+      this.sseSrc.onopen=()=>{this.sseOn=true};
+      this.sseSrc.onerror=()=>{this.sseOn=false};
+      this.sseSrc.onmessage=(e)=>{
+        try{
+          const evt=JSON.parse(e.data);
+          const c=(evt.data&&evt.data.content)||'';
+          if(c.includes('human review')||c.includes('Human Action')||c.includes('needs human')){
+            this.showNotif('human','Human Action Required',c);
+          }
+          this.liveEvents.unshift({
+            event_id:evt.data&&evt.data.event_id||('live-'+Date.now()),
+            type:evt.type||'system_event',
+            source:evt.data&&evt.data.source_agent||'system',
+            target:evt.data&&evt.data.target_agent||'',
+            content:c,
+            phase:evt.data&&evt.data.phase||'',
+            round:evt.data&&evt.data.round||0,
+            created_at:new Date().toISOString(),
+          });
+          if(this.liveEvents.length>200)this.liveEvents.length=200;
+          this.loadDetail(id);
+        }catch(err){}
+      };
+    },
+    agentName(id){
+      if(!this.s)return id;
+      const a=this.s.agents.find(x=>x.agent_id===id);
+      return a?(a.model?a.name+' ('+a.model+')':a.name):id;
+    },
+    evtSourceLabel(e){
+      const src=e.source||'system';
+      if(src==='system')return'System';
+      return this.agentName(src);
+    },
+    evtIconClass(type){
+      const m={system_event:'ei-system',assumption:'ei-assumption',assumption_supplement:'ei-assumption',proposal:'ei-proposal',challenge:'ei-challenge',revision:'ei-revision',optimization:'ei-optimization',risk:'ei-risk',consensus_vote:'ei-vote',human_decision:'ei-human',question:'ei-question',requirement_refine:'ei-refine'};
+      return m[type]||'ei-system';
+    },
+    evtIconFA(type){
+      const m={system_event:'fa-gear',assumption:'fa-lightbulb',assumption_supplement:'fa-plus-circle',proposal:'fa-file-lines',challenge:'fa-bolt',revision:'fa-wrench',optimization:'fa-arrow-up',risk:'fa-fire',consensus_vote:'fa-vote-yea',human_decision:'fa-user-check',question:'fa-circle-question',requirement_refine:'fa-pen-to-square'};
+      return m[type]||'fa-circle';
+    },
+    evtBadgeClass(type){
+      const m={system_event:'b-ph',assumption:'b-wn',assumption_supplement:'b-wn',proposal:'b-ac',challenge:'b-er',revision:'b-ok',optimization:'b-ok',risk:'b-er',consensus_vote:'b-ac',human_decision:'b-wn',question:'b-wn',requirement_refine:'b-ok'};
+      return m[type]||'b-ph';
+    },
+    evtTimeAgo(iso){
+      if(!iso)return'';
+      const d=new Date(iso);
+      const now=new Date();
+      const s=Math.floor((now-d)/1000);
+      if(s<60)return s+'s ago';
+      const m=Math.floor(s/60);
+      if(m<60)return m+'m ago';
+      const h=Math.floor(m/60);
+      if(h<24)return h+'h ago';
+      return Math.floor(h/24)+'d ago';
+    },
+    async apiCall(path,body){
+      try{
+        await fetch('/api/sessions/'+this.sid+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        await this.loadDetail(this.sid);
+        if(path==='/generate-document'){await this.loadDoc()}
+      }catch(e){console.error(e)}
+    },
+    showOverrideModal(){
+      this.modal={title:'Override Decision',message:'Enter your override decision:',actions:[
+        {label:'Cancel',cls:'btn-s',fn:()=>{}},
+        {label:'Confirm Override',cls:'btn-w',fn:()=>this.apiCall('/human-decision',{action:'override',decision:'override',rationale:'Human override via Web UI'})}
+      ]};
+      this.showModal=true;
+    },
+    showNotif(type,title,message){
+      this.notif={show:true,type,title,message};
+      if(type==='human'){
+        this.playSound();
+        if('Notification'in window&&Notification.permission==='granted'){
+          try{new Notification(title,{body:message})}catch(e){}
+        }
+      }
+      setTimeout(()=>{this.notif.show=false},type==='human'?15000:5000);
+    },
+    playSound(){
+      if(!this.soundOn)return;
+      try{
+        const ctx=new(window.AudioContext||window.webkitAudioContext)();
+        const o=ctx.createOscillator();const g=ctx.createGain();
+        o.connect(g);g.connect(ctx.destination);
+        o.frequency.setValueAtTime(880,ctx.currentTime);
+        o.frequency.setValueAtTime(660,ctx.currentTime+.15);
+        o.frequency.setValueAtTime(880,ctx.currentTime+.3);
+        g.gain.setValueAtTime(.3,ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(.01,ctx.currentTime+.5);
+        o.start(ctx.currentTime);o.stop(ctx.currentTime+.5);
+      }catch(e){}
+    },
+  };
+}
+</script>
+</body>
+</html>

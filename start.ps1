@@ -21,6 +21,7 @@ if ($DeployTo) {
         Write-Host "[OK] Created directory: $DeployTo" -ForegroundColor Green
     }
 
+    # 1. 分发 skills
     $deployItems = @(
         @{ Src = ".agents\skills"; DstParent = ".agents"; Desc = "Generic skills (.agents/)" },
         @{ Src = ".claude\skills"; DstParent = ".claude"; Desc = "Claude Code skills" },
@@ -37,7 +38,28 @@ if ($DeployTo) {
         }
     }
 
-    # MCP 配置文件：Claude Code 使用根目录 .mcp.json，Cursor 使用 .cursor/mcp.json，Trae 使用 .trae/mcp.json
+    # 2. 分发根目录 .mcp.json（如果项目中有）
+    $rootMcpJson = Join-Path $ProjectDir ".mcp.json"
+    if (Test-Path $rootMcpJson) {
+        Copy-Item -Path $rootMcpJson -Destination (Join-Path $DeployTo ".mcp.json") -Force
+        Write-Host "[OK] Root .mcp.json" -ForegroundColor Green
+    }
+
+    # 3. 分发重要脚本和文档
+    $deployFiles = @(
+        @{ Src = "start.ps1"; Desc = "start.ps1" },
+        @{ Src = "start.sh"; Desc = "start.sh" },
+        @{ Src = "README.md"; Desc = "README.md" }
+    )
+    foreach ($file in $deployFiles) {
+        $srcFile = Join-Path $ProjectDir $file.Src
+        if (Test-Path $srcFile) {
+            Copy-Item -Path $srcFile -Destination (Join-Path $DeployTo $file.Src) -Force
+            Write-Host "[OK] $($file.Desc)" -ForegroundColor Green
+        }
+    }
+
+    # 4. 生成各客户端 MCP 配置文件
     $mcpConfigHTTP = "{`n  `"mcpServers`": {`n    `"designdoc`": {`n      `"type`": `"http`",`n      `"url`": `"http://localhost:${Port}/mcp`"`n    }`n  }`n}"
     $mcpConfigs = @(
         @{ Path = ".cursor\mcp.json"; Config = $mcpConfigHTTP; Desc = "Cursor MCP config (Streamable HTTP)" },
