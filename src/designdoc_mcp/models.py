@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -45,7 +46,7 @@ PHASE_DESCRIPTIONS: dict[DebatePhase, str] = {
     DebatePhase.CLARIFY_REVIEW: "Human reviews the merged assumption document. For each assumption, human can accept the default or choose an alternative. Divergent assumptions (agents disagree) must be resolved.",
     DebatePhase.CLARIFY_REWRITE: "Based on human choices, agents propose a refined requirement document. The refined requirement replaces the original fuzzy statement.",
     DebatePhase.PROPOSAL: "Each agent independently proposes a solution from their assigned perspective. Agents MUST NOT read other agents' proposals to avoid anchoring bias.",
-    DebatePhase.CRITIC: "Agents challenge each other's proposals. Each agent MUST identify at least 3 risks, 2 missing considerations, and 1 alternative. Vague agreement like 'I agree' or 'looks good' is FORBIDDEN.",
+    DebatePhase.CRITIC: "Agents challenge each other's proposals. Each agent MUST: (1) identify at least 3 risks, 2 missing considerations, and 1 alternative; (2) submit decision_points for key divergences (e.g., database choice, deployment strategy) where agents propose different solutions. Vague agreement like 'I agree' or 'looks good' is FORBIDDEN.",
     DebatePhase.REVISION: "Agents revise their proposals by incorporating valid feedback. Must explicitly state accepted/rejected feedback with reasons. Polite acknowledgment without design changes is FORBIDDEN.",
     DebatePhase.OPTIMIZATION: "Agents propose optimizations: simpler, more stable, cheaper, more maintainable, or more scalable alternatives.",
     DebatePhase.DEVILS_ADVOCATE: "A randomly designated agent must argue against the current design. Prompt: 'Assume this design will fail. Prove why.'",
@@ -92,7 +93,7 @@ PERSPECTIVE_DESCRIPTIONS: dict[str, str] = {
     "integration_ecosystem": "Focus on integration: APIs, SDKs, third-party compatibility, extensibility",
 }
 
-MAX_CLARIFY_ROUNDS = 3
+MAX_CLARIFY_ROUNDS = int(os.environ.get("DESIGNDOC_MAX_CLARIFY_ROUNDS", "3"))
 
 CLARITY_DIMENSIONS: list[str] = [
     "core_entities",
@@ -107,7 +108,7 @@ CLARITY_DIMENSIONS: list[str] = [
     "scope_boundary",
 ]
 
-CLARITY_THRESHOLD = 0.7
+CLARITY_THRESHOLD = float(os.environ.get("DESIGNDOC_CLARITY_THRESHOLD", "0.7"))
 
 
 class AgentInfo(BaseModel):
@@ -123,7 +124,28 @@ class AgentInfo(BaseModel):
     current_perspective: str = ""
     runtime_mode: str = "persistent_worker"  # persistent_worker / normal_worker
 
-AGENT_INACTIVE_TIMEOUT_SECONDS = 300
+AGENT_INACTIVE_TIMEOUT_SECONDS = int(os.environ.get("DESIGNDOC_AGENT_TIMEOUT", "300"))
+
+
+class DecisionOption(BaseModel):
+    """决策点的一个选项"""
+    option_id: str
+    label: str                 # 选项名称，如"PostgreSQL"
+    proposed_by: str           # 提出该选项的Agent ID
+    reasoning: str = ""        # 理由
+    pros: list[str] = []       # 优点
+    cons: list[str] = []       # 缺点
+
+
+class DecisionPoint(BaseModel):
+    """一个具体的决策分歧点"""
+    decision_id: str
+    topic: str                 # 决策主题关键词，如"database"
+    description: str           # 背景描述
+    options: list[DecisionOption] = []
+    constraints: list[str] = []  # 关联约束
+    human_choice: str = ""     # 人类最终选择的option_id
+    human_custom: str = ""     # 人类自定义输入
 
 
 class EventType(str, enum.Enum):
@@ -370,6 +392,7 @@ class Session(BaseModel):
     devils_advocates: list[DevilsAdvocate] = Field(default_factory=list)
     consensus_votes: list[ConsensusVote] = Field(default_factory=list)
     pending_questions: list[PendingQuestion] = Field(default_factory=list)
+    decision_points: list[DecisionPoint] = Field(default_factory=list)
     novelty_scores: list[float] = Field(default_factory=list)
     devils_advocate_agent: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

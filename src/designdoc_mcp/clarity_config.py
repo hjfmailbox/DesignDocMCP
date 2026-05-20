@@ -1,10 +1,12 @@
 """清晰度评估配置模块
 
 集中管理清晰度评估的维度关键词和评分参数，替代硬编码配置。
+支持通过环境变量覆盖关键参数。
 """
 
 from __future__ import annotations
 
+import os
 from typing import Dict, List
 
 # 维度关键词配置
@@ -51,11 +53,11 @@ DIMENSION_KEYWORDS: Dict[str, List[str]] = {
     ],
 }
 
-# 评分参数常量
-MAX_LENGTH_BONUS = 0.15           # 文本长度奖励最大值
-LENGTH_NORMALIZATION_FACTOR = 10000  # 文本长度归一化因子
-FIELD_COMPLETION_BONUS = 0.05    # 每个完整字段的奖励权重
-MAX_CLARITY_SCORE = 1.0          # 清晰度分数上限
+# 评分参数常量（支持环境变量覆盖）
+MAX_LENGTH_BONUS = float(os.environ.get("DESIGNDOC_MAX_LENGTH_BONUS", "0.15"))
+LENGTH_NORMALIZATION_FACTOR = int(os.environ.get("DESIGNDOC_LENGTH_NORM_FACTOR", "10000"))
+FIELD_COMPLETION_BONUS = float(os.environ.get("DESIGNDOC_FIELD_COMPLETION_BONUS", "0.05"))
+MAX_CLARITY_SCORE = float(os.environ.get("DESIGNDOC_MAX_CLARITY_SCORE", "1.0"))
 
 
 def validate_config() -> bool:

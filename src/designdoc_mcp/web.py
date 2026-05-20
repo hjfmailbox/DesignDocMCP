@@ -72,9 +72,10 @@ async def index():
 
 
 @web_app.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(limit: int = 0, offset: int = 0, status: str | None = None):
     store = _get_store()
-    sessions = store.list_sessions()
+    sessions = store.list_sessions(status=status, limit=limit, offset=offset)
+    total = len(store.list_sessions(status=status))
     result = []
     for s in sessions:
         agents_info = []
@@ -99,7 +100,7 @@ async def list_sessions():
             "skip_clarification": s.requirement.skip_clarification if s.requirement else False,
             "needs_human": _check_needs_human(s),
         })
-    return result
+    return {"total": total, "limit": limit, "offset": offset, "sessions": result}
 
 
 @web_app.get("/api/sessions/{session_id}")
@@ -327,6 +328,20 @@ async def archive_session_api(session_id: str, _auth=Depends(_verify_token)):
     try:
         engine.archive_session(session_id)
         return {"status": "ok"}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@web_app.post("/api/sessions/{session_id}/resolve-decision-point")
+async def resolve_decision_point_api(session_id: str, request: Request, _auth=Depends(_verify_token)):
+    body = await request.json()
+    decision_id = body.get("decision_id", "")
+    choice = body.get("choice", "")
+    custom = body.get("custom", "")
+    engine = _get_engine()
+    try:
+        result = engine.resolve_decision_point(session_id=session_id, decision_id=decision_id, choice=choice, custom=custom)
+        return result
     except ValueError as e:
         return {"error": str(e)}
 
@@ -619,6 +634,28 @@ def _serialize_session(session: Any) -> dict[str, Any]:
         "devils_advocates": devils_advocates,
         "votes": votes,
         "pending_questions": pending_questions,
+        "decision_points": [
+            {
+                "decision_id": dp.decision_id,
+                "topic": dp.topic,
+                "description": dp.description,
+                "options": [
+                    {
+                        "option_id": o.option_id,
+                        "label": o.label,
+                        "proposed_by": o.proposed_by,
+                        "reasoning": o.reasoning,
+                        "pros": o.pros,
+                        "cons": o.cons,
+                    }
+                    for o in dp.options
+                ],
+                "constraints": dp.constraints,
+                "human_choice": dp.human_choice,
+                "human_custom": dp.human_custom,
+            }
+            for dp in session.decision_points
+        ] if session.decision_points else [],
         "events": events,
         "phase_progress": phase_progress,
         "needs_human": needs_human,

@@ -274,6 +274,53 @@ def delete_session(session_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def submit_decision_points(
+    session_id: str,
+    agent_id: str,
+    decision_points: list[dict],
+) -> dict[str, Any]:
+    """Submit decision points identified during Critic phase.
+
+    Each decision point represents a key design divergence where agents disagree.
+    Structure: [{topic, description, options: [{label, reasoning, pros, cons}], constraints}]
+
+    Args:
+        session_id: The session identifier
+        agent_id: The submitting agent identifier
+        decision_points: List of decision point dicts
+
+    Returns:
+        Confirmation with count and decision_ids
+    """
+    engine = _get_engine()
+    return engine.submit_decision_points(session_id=session_id, agent_id=agent_id, decision_points=decision_points)
+
+
+@mcp.tool()
+def resolve_decision_point(
+    session_id: str,
+    decision_id: str,
+    choice: str = "",
+    custom: str = "",
+) -> dict[str, Any]:
+    """Resolve a decision point with human choice or custom input.
+
+    Choose one of the proposed options, or provide a custom solution.
+
+    Args:
+        session_id: The session identifier
+        decision_id: The decision point identifier
+        choice: The option_id to select (from existing options)
+        custom: Custom solution text (alternative to choice)
+
+    Returns:
+        Confirmation of resolution
+    """
+    engine = _get_engine()
+    return engine.resolve_decision_point(session_id=session_id, decision_id=decision_id, choice=choice, custom=custom)
+
+
+@mcp.tool()
 def start_clarification(session_id: str) -> dict[str, Any]:
     """Start the clarification phase to refine a fuzzy requirement.
 

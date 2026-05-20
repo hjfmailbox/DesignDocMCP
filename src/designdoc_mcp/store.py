@@ -122,12 +122,17 @@ class SessionStore:
         self._reload_session(session_id)
         return self._sessions.get(session_id)
 
-    def list_sessions(self, status: str | None = None) -> list[Session]:
+    def list_sessions(self, status: str | None = None, limit: int = 0, offset: int = 0) -> list[Session]:
         self._load_all()
         sessions = list(self._sessions.values())
         if status is not None:
             sessions = [s for s in sessions if s.status.value == status]
-        return sorted(sessions, key=lambda s: s.created_at, reverse=True)
+        sessions = sorted(sessions, key=lambda s: s.created_at, reverse=True)
+        if offset > 0:
+            sessions = sessions[offset:]
+        if limit > 0:
+            sessions = sessions[:limit]
+        return sessions
 
     def update_session(self, session: Session) -> Session:
         self._acquire_lock(session.session_id)

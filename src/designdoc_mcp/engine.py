@@ -838,6 +838,133 @@ class CollaborationEngine:
         self._check_phase_completion(session)
         return revision
 
+    def submit_decision_points(
+        self,
+        session_id: str,
+        agent_id: str,
+        decision_points: list[dict],
+    ) -> dict:
+        """Submit decision points identified during Critic phase.
+        Called alongside submit_challenge to extract key decision divergences.
+
+        Args:
+            decision_points: List of dicts with keys: topic, description, options, constraints
+                Each option: {label, reasoning, pros, cons}
+        """
+        session = self._get(session_id)
+        self._validate_phase(session, DebatePhase.CRITIC)
+        self._validate_agent(session, agent_id)
+        self._touch_agent(session, agent_id)
+
+        added = []
+        for dp_data in decision_points:
+            topic = dp_data.get("topic", "").strip()
+            if not topic:
+                continue
+            options = []
+            for opt_data in dp_data.get("options", []):
+                options.append(DecisionOption(
+                    option_id=f"{agent_id}_{topic}_{opt_data.get('label', 'unknown')}".lower().replace(" ", "_"),
+                    label=opt_data.get("label", ""),
+                    proposed_by=agent_id,
+                    reasoning=opt_data.get("reasoning", ""),
+                    pros=opt_data.get("pros", []),
+                    cons=opt_data.get("cons", []),
+                ))
+            dp = DecisionPoint(
+                decision_id=f"dp_{uuid.uuid4().hex[:8]}",
+                topic=topic,
+                description=dp_data.get("description", ""),
+                options=options,
+                constraints=dp_data.get("constraints", []),
+            )
+            session.decision_points.append(dp)
+            added.append(dp.decision_id)
+
+        self._add_event(session, EventType.SYSTEM_EVENT, agent_id, content=f"Submitted {len(added)} decision points")
+        self.store.update_session(session)
+        logger.info("submit_decision_points: agent %s submitted %d points in session %s", agent_id, len(added), session_id)
+        return {"action": "submitted", "count": len(added), "decision_ids": added}
+
+    def _merge_decision_points(self, session: Session) -> None:
+        """Merge decision points by topic. Same-topic points get their options combined."""
+        by_topic: dict[str, list[DecisionPoint]] = {}
+        for dp in session.decision_points:
+            key = dp.topic.lower().strip()
+            if key not in by_topic:
+                by_topic[key] = []
+            by_topic[key].append(dp)
+
+        merged = []
+        for topic, dps in by_topic.items():
+            if len(dps) == 1:
+                merged.append(dps[0])
+                continue
+            # Merge options from all DPs with the same topic
+            all_options = []
+            seen_labels: dict[str, DecisionOption] = {}
+            for dp in dps:
+                for opt in dp.options:
+                    label_key = opt.label.lower().strip()
+                    if label_key in seen_labels:
+                        # Merge: combine reasoning from multiple agents
+                        existing = seen_labels[label_key]
+                        if opt.reasoning and opt.reasoning not in existing.reasoning:
+                            existing.reasoning += f" | {opt.proposed_by}: {opt.reasoning}"
+                        existing.pros = list(set(existing.pros + opt.pros))
+                        existing.cons = list(set(existing.cons + opt.cons))
+                    else:
+                        seen_labels[label_key] = opt.model_copy()
+                        all_options.append(seen_labels[label_key])
+
+            all_constraints = list(set(c for dp in dps for c in dp.constraints))
+            best_desc = max(dps, key=lambda d: len(d.description)).description
+
+            merged.append(DecisionPoint(
+                decision_id=dps[0].decision_id,
+                topic=dps[0].topic,
+                description=best_desc,
+                options=all_options,
+                constraints=all_constraints,
+                human_choice=dps[0].human_choice,
+                human_custom=dps[0].human_custom,
+            ))
+
+        session.decision_points = merged
+
+    def resolve_decision_point(
+        self,
+        session_id: str,
+        decision_id: str,
+        choice: str = "",
+        custom: str = "",
+    ) -> dict:
+        """Resolve a decision point with human choice or custom input."""
+        session = self._get(session_id)
+        dp = None
+        for d in session.decision_points:
+            if d.decision_id == decision_id:
+                dp = d
+                break
+        if dp is None:
+            raise ValueError(f"Decision point '{decision_id}' not found")
+
+        if custom:
+            dp.human_custom = custom
+            dp.human_choice = "custom"
+        elif choice:
+            valid = [o.option_id for o in dp.options]
+            if choice not in valid and choice != "custom":
+                raise ValueError(f"Invalid choice '{choice}'. Valid: {valid}")
+            dp.human_choice = choice
+        else:
+            raise ValueError("Must provide either 'choice' or 'custom'")
+
+        self._add_event(session, EventType.HUMAN_DECISION, "human", content=f"Decision '{dp.topic}': {choice or 'custom: ' + custom}")
+        self.store.update_session(session)
+        logger.info("resolve_decision_point: %s resolved with %s", decision_id, choice or "custom")
+        return {"action": "resolved", "decision_id": decision_id, "choice": dp.human_choice}
+
     def submit_optimization(
         self,
         session_id: str,
@@ -1484,6 +1611,10 @@ class CollaborationEngine:
 
             if next_phase == DebatePhase.CLARIFY_REFINE:
                 self._merge_assumptions(session)
+
+            if next_phase == DebatePhase.REVISION:
+                # Merge decision points from Critic phase before moving to Revision
+                self._merge_decision_points(session)
 
             if next_phase == DebatePhase.CLARIFY_REVIEW:
                 pass

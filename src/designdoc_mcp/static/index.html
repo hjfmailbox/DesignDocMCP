@@ -586,6 +586,56 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
         </div>
       </template>
     </div>
+    <!-- 按分歧点决策 -->
+    <div x-show="s.decision_points && s.decision_points.length > 0" class="card p-4">
+      <h3 class="text-sm font-semibold mb-3 flex items-center gap-2"><i class="fas fa-code-branch" style="color:var(--ac)"></i> 按分歧点决策 <span class="badge b-ac text-xs" x-text="s.decision_points.filter(d=>d.human_choice).length+'/'+s.decision_points.length+' 已决策'"></span></h3>
+      <p class="text-sm mb-3" style="color:var(--t2)">Agent 在讨论中识别出以下关键分歧，请逐项选择方案：</p>
+      <div class="space-y-4">
+        <template x-for="(dp, dpi) in s.decision_points" :key="dp.decision_id">
+          <div class="p-3" style="background:var(--bg3);border-radius:6px" :style="dp.human_choice?'opacity:0.6':''">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="font-medium text-sm" x-text="(dpi+1)+'. '+dp.topic"></span>
+              <span x-show="dp.human_choice" class="badge b-ok text-xs">已决策</span>
+            </div>
+            <p class="text-sm mb-3" style="color:var(--t2)" x-text="dp.description"></p>
+            <div class="space-y-2">
+              <template x-for="opt in dp.options" :key="opt.option_id">
+                <div class="flex items-start gap-2 p-2" style="background:var(--bg2);border-radius:4px;border:1px solid var(--bd)" :style="dp.human_choice===opt.option_id?'border-color:var(--ok)':''">
+                  <input type="radio" :name="'dp_'+dp.decision_id" :value="opt.option_id" :checked="dp.human_choice===opt.option_id" :disabled="dp.human_choice" @click="apiCall('/resolve-decision-point',{decision_id:dp.decision_id,choice:opt.option_id})" class="mt-1">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-sm" x-text="opt.label"></span>
+                      <span class="badge b-ph text-xs" x-text="agentName(opt.proposed_by)"></span>
+                    </div>
+                    <p x-show="opt.reasoning" class="text-xs mt-1" style="color:var(--t2)" x-text="opt.reasoning"></p>
+                    <div x-show="opt.pros.length" class="mt-1">
+                      <template x-for="p in opt.pros" :key="p"><span class="badge b-ok text-xs mr-1" x-text="p"></span></template>
+                    </div>
+                    <div x-show="opt.cons.length" class="mt-1">
+                      <template x-for="c in opt.cons" :key="c"><span class="badge b-er text-xs mr-1" x-text="c"></span></template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <!-- 自定义方案输入 -->
+              <div x-show="!dp.human_choice" class="flex gap-2 mt-2">
+                <input type="text" :id="'custom_'+dp.decision_id" placeholder="输入自定义方案..." class="flex-1 px-3 py-1.5 text-sm" style="background:var(--bg2);border:1px solid var(--bd);border-radius:4px;color:var(--t1)">
+                <button @click="apiCall('/resolve-decision-point',{decision_id:dp.decision_id,custom:document.getElementById('custom_'+dp.decision_id).value})" class="btn btn-s text-xs">提交自定义</button>
+              </div>
+              <div x-show="dp.human_choice==='custom'" class="mt-1 text-xs" style="color:var(--ac)">自定义方案：<span x-text="dp.human_custom"></span></div>
+            </div>
+            <div x-show="dp.constraints.length" class="mt-2">
+              <span class="text-xs" style="color:var(--wn)">约束：</span>
+              <template x-for="c in dp.constraints" :key="c"><span class="badge b-wn text-xs mr-1" x-text="c"></span></template>
+            </div>
+          </div>
+        </template>
+      </div>
+      <!-- 一键采纳多数方案 -->
+      <div x-show="s.decision_points.filter(d=>!d.human_choice).length > 0" class="mt-3 flex gap-2">
+        <button @click="adoptMajority()" class="btn btn-s text-xs"><i class="fas fa-magic"></i> 一键采纳多数方案</button>
+      </div>
+    </div>
     <div x-show="s.human_actions.includes('review_debate')" class="space-y-4">
       <!-- 流程中断提示（非共识阶段） -->
       <div class="card p-4" x-show="s.phase!=='consensus'">
@@ -948,6 +998,25 @@ function app(){
         {label:'Confirm Override',cls:'btn-w',fn:()=>this.apiCall('/human-decision',{action:'override',decision:'override',rationale:'Human override via Web UI'})}
       ]};
       this.showModal=true;
+    },
+    adoptMajority(){
+      const unresolved=this.s.decision_points.filter(d=>!d.human_choice);
+      for(const dp of unresolved){
+        if(dp.options.length===0) continue;
+        // Count votes per option label across all options
+        const labelCounts={};
+        for(const o of dp.options){
+          labelCounts[o.label]=(labelCounts[o.label]||0)+1;
+        }
+        // Pick the option with most votes
+        let best=dp.options[0];
+        let bestCount=0;
+        for(const o of dp.options){
+          const c=labelCounts[o.label]||0;
+          if(c>bestCount){bestCount=c;best=o;}
+        }
+        this.apiCall('/resolve-decision-point',{decision_id:dp.decision_id,choice:best.option_id});
+      }
     },
     showNotif(type,title,message){
       this.notif={show:true,type,title,message};
