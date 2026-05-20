@@ -202,6 +202,7 @@ class SessionStatus(str, enum.Enum):
     DEVILS_ADVOCATE = "devils_advocate"
     CONSENSUS = "consensus"
     HUMAN_REVIEW = "human_review"
+    PAUSED = "paused"
     COMPLETED = "completed"
     ARCHIVED = "archived"
 

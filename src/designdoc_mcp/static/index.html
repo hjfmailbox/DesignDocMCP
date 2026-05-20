@@ -628,6 +628,14 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
               <span class="text-xs" style="color:var(--wn)">约束：</span>
               <template x-for="c in dp.constraints" :key="c"><span class="badge b-wn text-xs mr-1" x-text="c"></span></template>
             </div>
+            <!-- 约束冲突提示 -->
+            <template x-if="dp.constraints.length && dp.human_choice">
+              <div class="mt-2">
+                <template x-for="c in dp.constraints.filter(constraint => checkConstraintConflict(dp, constraint))" :key="c">
+                  <div class="flex items-center gap-1 text-xs" style="color:var(--er)"><i class="fas fa-exclamation-triangle"></i> <span x-text="c"></span></div>
+                </template>
+              </div>
+            </template>
           </div>
         </template>
       </div>
@@ -1017,6 +1025,24 @@ function app(){
         }
         this.apiCall('/resolve-decision-point',{decision_id:dp.decision_id,choice:best.option_id});
       }
+    },
+    checkConstraintConflict(dp, constraint){
+      if(!dp.human_choice) return false;
+      const chosenOpt=dp.options.find(o=>o.option_id===dp.human_choice);
+      if(!chosenOpt) return false;
+      // Simple constraint check: if constraint mentions the chosen label, flag it
+      const label=chosenOpt.label.toLowerCase();
+      const conStr=constraint.toLowerCase();
+      // Check for patterns like "选择了X则不能选Y" or "X conflicts with Y"
+      if(conStr.includes(label)){
+        // Check if another resolved DP chose a conflicting option
+        for(const other of this.s.decision_points){
+          if(other.decision_id===dp.decision_id||!other.human_choice) continue;
+          const otherOpt=other.options.find(o=>o.option_id===other.human_choice);
+          if(otherOpt && conStr.includes(otherOpt.label.toLowerCase())) return true;
+        }
+      }
+      return false;
     },
     showNotif(type,title,message){
       this.notif={show:true,type,title,message};

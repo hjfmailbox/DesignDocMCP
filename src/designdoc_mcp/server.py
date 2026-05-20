@@ -321,6 +321,34 @@ def resolve_decision_point(
 
 
 @mcp.tool()
+def pause_session(session_id: str) -> dict[str, Any]:
+    """Pause a session. Agents cannot submit while paused.
+
+    Args:
+        session_id: The session identifier
+
+    Returns:
+        Confirmation with previous status
+    """
+    engine = _get_engine()
+    return engine.pause_session(session_id=session_id)
+
+
+@mcp.tool()
+def resume_session(session_id: str) -> dict[str, Any]:
+    """Resume a paused session.
+
+    Args:
+        session_id: The session identifier
+
+    Returns:
+        Confirmation with resumed status
+    """
+    engine = _get_engine()
+    return engine.resume_session(session_id=session_id)
+
+
+@mcp.tool()
 def start_clarification(session_id: str) -> dict[str, Any]:
     """Start the clarification phase to refine a fuzzy requirement.
 

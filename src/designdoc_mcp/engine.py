@@ -31,6 +31,8 @@ from .models import (
     ChallengePriority,
     ConsensusVote,
     DebatePhase,
+    DecisionOption,
+    DecisionPoint,
     DevilsAdvocate,
     Event,
     EventType,
@@ -256,8 +258,8 @@ class CollaborationEngine:
 
     def start_clarification(self, session_id: str) -> dict:
         session = self._get(session_id)
-        if len(session.agents) < 2:
-            raise ValueError("At least 2 agents required")
+        if len(session.agents) < 1:
+            raise ValueError("At least 1 agent required")
         if session.requirement is None:
             raise ValueError("Requirement must be submitted first")
 
@@ -773,8 +775,9 @@ class CollaborationEngine:
         self._touch_agent(session, agent_id)
 
         # 验证目标 agent 存在
-        if target_agent_id == agent_id:
-            raise ValueError("Cannot challenge your own proposal")
+        active_count = self._active_agent_count(session)
+        if target_agent_id == agent_id and active_count > 1:
+            raise ValueError("Cannot challenge your own proposal (single-agent mode allows self-review)")
         self._validate_agent(session, target_agent_id)
 
         # 验证目标 proposal 存在
@@ -1212,6 +1215,36 @@ class CollaborationEngine:
             "status": "archived",
         }
 
+    def pause_session(self, session_id: str) -> dict:
+        """Pause a session. Agents cannot submit while paused."""
+        session = self._get(session_id)
+        if session.status == SessionStatus.PAUSED:
+            raise ValueError("Session is already paused")
+        if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
+            raise ValueError(f"Cannot pause {session.status.value} session")
+        previous_status = session.status
+        session.metadata["paused_from_status"] = previous_status.value
+        session.status = SessionStatus.PAUSED
+        self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Session paused")
+        self.store.update_session(session)
+        logger.info("pause_session: session %s paused from %s", session_id, previous_status.value)
+        return {"session_id": session_id, "status": "paused", "previous_status": previous_status.value}
+
+    def resume_session(self, session_id: str) -> dict:
+        """Resume a paused session."""
+        session = self._get(session_id)
+        if session.status != SessionStatus.PAUSED:
+            raise ValueError("Session is not paused")
+        previous_status = session.metadata.pop("paused_from_status", session.current_phase.value)
+        try:
+            session.status = SessionStatus(previous_status)
+        except ValueError:
+            session.status = SessionStatus(session.current_phase.value)
+        self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Session resumed from {previous_status}")
+        self.store.update_session(session)
+        logger.info("resume_session: session %s resumed to %s", session_id, previous_status)
+        return {"session_id": session_id, "status": session.status.value, "resumed_from": previous_status}
+
     def get_session_flow(self, session_id: str) -> dict:
         session = self._get(session_id)
 
@@ -1419,6 +1452,8 @@ class CollaborationEngine:
         })
 
     def _validate_phase(self, session: Session, expected: DebatePhase) -> None:
+        if session.status == SessionStatus.PAUSED:
+            raise ValueError("Session is paused. Resume before submitting.")
         if session.current_phase != expected:
             raise ValueError(f"Expected phase '{expected.value}', but session is in '{session.current_phase.value}'")
 

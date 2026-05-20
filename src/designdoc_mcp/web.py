@@ -332,6 +332,24 @@ async def archive_session_api(session_id: str, _auth=Depends(_verify_token)):
         return {"error": str(e)}
 
 
+@web_app.post("/api/sessions/{session_id}/pause")
+async def pause_session_api(session_id: str, _auth=Depends(_verify_token)):
+    engine = _get_engine()
+    try:
+        return engine.pause_session(session_id=session_id)
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@web_app.post("/api/sessions/{session_id}/resume")
+async def resume_session_api(session_id: str, _auth=Depends(_verify_token)):
+    engine = _get_engine()
+    try:
+        return engine.resume_session(session_id=session_id)
+    except ValueError as e:
+        return {"error": str(e)}
+
+
 @web_app.post("/api/sessions/{session_id}/resolve-decision-point")
 async def resolve_decision_point_api(session_id: str, request: Request, _auth=Depends(_verify_token)):
     body = await request.json()

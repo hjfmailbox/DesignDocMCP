@@ -412,3 +412,227 @@ class TestFullDebateFlow:
         doc = generate_design_document(session)
         assert "Full Flow Test" in doc
         assert "Final Architecture" in doc
+
+
+# ==================== 新功能测试 ====================
+
+
+class TestAutoRejoin:
+    def test_register_with_identity_creates_new(self, engine):
+        session = engine.create_session(title="Rejoin Test", description="Test")
+        sid = session.session_id
+        r = engine.register_agent(session_id=sid, name="Cursor Agent", agent_identity="cursor_local", client_type="cursor")
+        assert r.agent_id is not None
+        assert getattr(r, "_rejoined", False) is False
+
+    def test_register_same_identity_rejoins(self, engine):
+        session = engine.create_session(title="Rejoin Test", description="Test")
+        sid = session.session_id
+        r1 = engine.register_agent(session_id=sid, name="Cursor Agent", agent_identity="cursor_local", client_type="cursor")
+        r2 = engine.register_agent(session_id=sid, name="Cursor Agent", agent_identity="cursor_local", client_type="cursor")
+        assert getattr(r2, "_rejoined", False) is True
+        s = engine._get(sid)
+        assert len(s.agents) == 1
+
+    def test_rejoin_preserves_perspective(self, engine):
+        session = engine.create_session(title="Rejoin Test", description="Test")
+        sid = session.session_id
+        r1 = engine.register_agent(session_id=sid, name="Cursor Agent", agent_identity="cursor_local", client_type="cursor")
+        r1.current_perspective = "scalability"
+        engine.store.update_session(engine._get(sid))
+        r2 = engine.register_agent(session_id=sid, name="Cursor Agent", agent_identity="cursor_local", client_type="cursor")
+        assert r2.current_perspective == "scalability"
+
+
+class TestDecisionPoints:
+    def test_submit_decision_points(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        result = engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {
+                    "topic": "database",
+                    "description": "Choose database type",
+                    "options": [
+                        {"label": "PostgreSQL", "reasoning": "Vector support", "pros": ["Feature rich"], "cons": ["Heavy"]},
+                        {"label": "SQLite", "reasoning": "Lightweight", "pros": ["Simple"], "cons": ["Limited"]},
+                    ],
+                    "constraints": ["SQLite conflicts with vector search"],
+                }
+            ],
+        )
+        assert result["count"] == 1
+
+    def test_resolve_decision_point(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        dp_result = engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [{"label": "PostgreSQL", "reasoning": "Vector support"}]},
+            ],
+        )
+        dp_id = dp_result["decision_ids"][0]
+        # Get the actual option_id from the decision point
+        session = engine._get(sid)
+        dp = [d for d in session.decision_points if d.decision_id == dp_id][0]
+        option_id = dp.options[0].option_id
+        result = engine.resolve_decision_point(sid, dp_id, choice=option_id)
+        assert result["choice"] == option_id
+
+    def test_resolve_decision_point_custom(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        dp_result = engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [{"label": "PostgreSQL", "reasoning": "Vector support"}]},
+            ],
+        )
+        dp_id = dp_result["decision_ids"][0]
+        result = engine.resolve_decision_point(sid, dp_id, custom="Use MongoDB instead")
+        assert result["choice"] == "custom"
+
+    def test_merge_decision_points_by_topic(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [{"label": "PostgreSQL", "reasoning": "Vector support"}]},
+            ],
+        )
+        engine.submit_decision_points(
+            sid, "agentb",
+            decision_points=[
+                {"topic": "database", "description": "DB selection needed", "options": [{"label": "SQLite", "reasoning": "Lightweight"}, {"label": "PostgreSQL", "reasoning": "ACID compliance"}]},
+            ],
+        )
+
+        session = engine._get(sid)
+        engine._merge_decision_points(session)
+        # Should merge into 1 DP with 2 unique options (PostgreSQL merged, SQLite added)
+        assert len(session.decision_points) == 1
+        dp = session.decision_points[0]
+        labels = [o.label for o in dp.options]
+        assert "PostgreSQL" in labels
+        assert "SQLite" in labels
+
+
+class TestSessionPauseResume:
+    def test_pause_and_resume(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        result = engine.pause_session(sid)
+        assert result["status"] == "paused"
+
+        session = engine._get(sid)
+        assert session.status == SessionStatus.PAUSED
+
+        result = engine.resume_session(sid)
+        assert "resumed_from" in result
+
+    def test_cannot_submit_while_paused(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.pause_session(sid)
+
+        with pytest.raises(ValueError, match="paused"):
+            engine.submit_assumptions(sid, "agenta", [{"dimension": "core_entities", "assumption": "Test"}])
+
+    def test_cannot_pause_archived(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        session = engine._get(sid)
+        session.status = SessionStatus.COMPLETED
+        session.completed_at = "2026-01-01T00:00:00"
+        engine.store.update_session(session)
+        engine.archive_session(sid)
+
+        with pytest.raises(ValueError, match="Cannot pause"):
+            engine.pause_session(sid)
+
+
+class TestDeregisterAgent:
+    def test_deregister_marks_inactive(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        result = engine.deregister_agent(sid, "agenta")
+        assert result["action"] == "deregistered"
+
+        session = engine._get(sid)
+        agent = [a for a in session.agents if a.agent_id == "agenta"][0]
+        assert agent.is_active is False
+
+    def test_deregister_nonexistent_agent(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        with pytest.raises(ValueError, match="not found"):
+            engine.deregister_agent(sid, "ghost-agent")
+
+
+class TestDeleteSession:
+    def test_delete_archived_session(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        session = engine._get(sid)
+        session.status = SessionStatus.COMPLETED
+        session.completed_at = "2026-01-01T00:00:00"
+        engine.store.update_session(session)
+        engine.archive_session(sid)
+
+        result = engine.delete_session(sid)
+        assert result["action"] == "deleted"
+
+    def test_cannot_delete_active_session(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        with pytest.raises(ValueError, match="Only archived"):
+            engine.delete_session(sid)
+
+
+class TestSingleAgentSelfReview:
+    def test_single_agent_can_self_challenge(self, engine):
+        session = engine.create_session(title="Single Agent", description="Test")
+        sid = session.session_id
+        engine.register_agent(session_id=sid, name="Solo")
+
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        engine.submit_proposal(sid, "solo", architecture="Arch Solo")
+
+        session = engine._get(sid)
+        proposal = session.proposals[0]
+
+        # Single agent should be able to challenge own proposal
+        challenge = engine.submit_challenge(
+            sid, "solo", "solo", proposal.proposal_id,
+            risks=["Risk 1", "Risk 2", "Risk 3"],
+            missing_considerations=["Missing 1", "Missing 2"],
+        )
+        assert challenge is not None
+
+
+class TestDebatePhaseCreated:
+    def test_new_session_has_created_phase(self, engine):
+        session = engine.create_session(title="New Session", description="Test")
+        assert session.current_phase == DebatePhase.CREATED
+        assert session.status == SessionStatus.CREATED
