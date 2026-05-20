@@ -32,7 +32,7 @@
 | EventBus线程安全 | ✅ 已完成 | 2026-05-18 | 2026-05-18 |
 | get_session mtime缓存优化 | ✅ 已完成 | 2026-05-18 | 2026-05-18 |
 
-### 阶段三：配置外部化与代码质量 [进行中]
+### 阶段三：配置外部化与代码质量 [已完成]
 
 | 任务 | 状态 | 预计完成 | 实际完成 |
 |------|------|---------|---------|
@@ -51,24 +51,25 @@
 
 | 任务 | 状态 | 预计完成 | 实际完成 |
 |------|------|---------|---------|
-| Session默认状态修正（NOT_STARTED阶段） | 📋 未开始 | 2026-05-22 | — |
-| submit_assumptions多轮澄清修复 | 📋 未开始 | 2026-05-22 | — |
-| submit_challenge目标验证 | 📋 未开始 | 2026-05-22 | — |
-| _save更新mtime缓存 | 📋 未开始 | 2026-05-22 | — |
-| 数值字段范围校验（priority枚举化） | 📋 未开始 | 2026-05-22 | — |
+| Session默认状态修正（NOT_STARTED阶段） | ✅ 已完成 | 2026-05-22 | 2026-05-20 |
+| submit_assumptions多轮澄清修复 | ✅ 已完成 | 2026-05-22 | 2026-05-20 |
+| submit_challenge目标验证 | ✅ 已完成 | 2026-05-22 | 2026-05-20 |
+| _save更新mtime缓存 | ✅ 已完成 | 2026-05-22 | 2026-05-20 |
+| 数值字段范围校验（priority枚举化） | ✅ 已完成 | 2026-05-22 | 2026-05-20 |
 | 文档生成空架构占位提示 | 📋 未开始 | 2026-05-22 | — |
 | generate_design_document状态检查 | 📋 未开始 | 2026-05-22 | — |
 | CLARIFY_REWRITE自动推进逻辑修正 | 📋 未开始 | 2026-05-22 | — |
 
-### 阶段五：功能扩展 [未开始]
+### 阶段五：功能扩展 [部分完成]
 
 | 任务 | 状态 | 预计完成 | 实际完成 |
 |------|------|---------|---------|
-| deregister_agent MCP工具 | 📋 未开始 | — | — |
-| delete_session MCP工具 | 📋 未开始 | — | — |
-| list_sessions分页支持 | 📋 未开始 | — | — |
-| Session暂停/恢复 | 📋 未开始 | — | — |
-| 单Agent自审模式 | 📋 未开始 | — | — |
+| deregister_agent MCP工具 | ✅ 已完成 | — | 2026-05-20 |
+| delete_session MCP工具 | ✅ 已完成 | — | 2026-05-20 |
+| list_sessions分页支持 | ✅ 已完成 | — | 2026-05-20 |
+| Session暂停/恢复 | ✅ 已完成 | — | 2026-05-20 |
+| 单Agent自审模式 | ✅ 已完成 | — | 2026-05-20 |
+| 按分歧点决策（DecisionPoint） | ✅ 已完成 | — | 2026-05-20 |
 | 操作回滚/撤销 | 📋 未开始 | — | — |
 
 图例：✅ 已完成 / ⏳ 进行中 / 📋 未开始
@@ -170,6 +171,7 @@ designdoc-mcp/
 
 ```python
 class DebatePhase(str, enum.Enum):
+    CREATED = "created"
     CLARIFY_IDENTIFY = "clarify_identify"
     CLARIFY_REFINE = "clarify_refine"
     CLARIFY_REVIEW = "clarify_review"
@@ -186,7 +188,7 @@ class DebatePhase(str, enum.Enum):
 ```python
 CLARIFY_PHASES = [CLARIFY_IDENTIFY, CLARIFY_REFINE, CLARIFY_REVIEW, CLARIFY_REWRITE]
 DEBATE_PHASES = [PROPOSAL, CRITIC, REVISION, OPTIMIZATION, DEVILS_ADVOCATE, CONSENSUS]
-PHASE_ORDER = CLARIFY_PHASES + DEBATE_PHASES
+PHASE_ORDER = [CREATED] + CLARIFY_PHASES + DEBATE_PHASES
 ```
 
 #### SessionStatus — 会话状态
@@ -205,6 +207,7 @@ class SessionStatus(str, enum.Enum):
     DEVILS_ADVOCATE = "devils_advocate"
     CONSENSUS = "consensus"
     HUMAN_REVIEW = "human_review"
+    PAUSED = "paused"
     COMPLETED = "completed"
     ARCHIVED = "archived"
 ```
@@ -525,7 +528,7 @@ class Session(BaseModel):
     title: str
     description: str
     status: SessionStatus = SessionStatus.CREATED
-    current_phase: DebatePhase = DebatePhase.CLARIFY_IDENTIFY
+    current_phase: DebatePhase = DebatePhase.CREATED
     current_round: int = 1
     min_rounds: int = 4
     max_rounds: int = 8
@@ -544,6 +547,7 @@ class Session(BaseModel):
     devils_advocates: list[DevilsAdvocate] = []
     consensus_votes: list[ConsensusVote] = []
     pending_questions: list[PendingQuestion] = []
+    decision_points: list[DecisionPoint] = []          # 按分歧点提交的决策
     novelty_scores: list[float] = []
     devils_advocate_agent: str = ""                  # 被指定为魔鬼代言人的agent_id
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
@@ -559,12 +563,13 @@ class Session(BaseModel):
 
 | 阶段 | 描述 |
 |------|------|
+| CREATED | Session created, waiting for requirement submission and agent registration. |
 | CLARIFY_IDENTIFY | Each agent independently identifies assumptions in the fuzzy requirement. Do NOT read other agents' assumptions. Produce a structured assumption document organized by dimension. Each assumption must include alternatives for human to choose from. |
 | CLARIFY_REFINE | System has merged all assumptions. Agents can now supplement alternatives to existing assumptions, but cannot remove or challenge assumptions raised by others. Focus on adding missing options. |
 | CLARIFY_REVIEW | Human reviews the merged assumption document. For each assumption, human can accept the default or choose an alternative. Divergent assumptions (agents disagree) must be resolved. |
 | CLARIFY_REWRITE | Based on human choices, agents propose a refined requirement document. The refined requirement replaces the original fuzzy statement. |
 | PROPOSAL | Each agent independently proposes a solution from their assigned perspective. Agents MUST NOT read other agents' proposals to avoid anchoring bias. |
-| CRITIC | Agents challenge each other's proposals. Each agent MUST identify at least 3 risks, 2 missing considerations, and 1 alternative. Vague agreement like 'I agree' or 'looks good' is FORBIDDEN. |
+| CRITIC | Agents challenge each other's proposals. Each agent MUST: (1) identify at least 3 risks, 2 missing considerations, and 1 alternative; (2) submit decision_points for key divergences (e.g., database choice, deployment strategy) where agents propose different solutions. Vague agreement like 'I agree' or 'looks good' is FORBIDDEN. |
 | REVISION | Agents revise their proposals by incorporating valid feedback. Must explicitly state accepted/rejected feedback with reasons. Polite acknowledgment without design changes is FORBIDDEN. |
 | OPTIMIZATION | Agents propose optimizations: simpler, more stable, cheaper, more maintainable, or more scalable alternatives. |
 | DEVILS_ADVOCATE | A randomly designated agent must argue against the current design. Prompt: 'Assume this design will fail. Prove why.' |
@@ -753,7 +758,7 @@ for i, agent in enumerate(session.agents):
 | 提交者验证 | agent_id 必须是已注册Agent | ValueError |
 | 目标Agent存在 | **验证** target_agent_id 必须是已注册Agent | ValueError |
 | 目标提案存在 | **验证** target_proposal_id 必须在当前轮次提案中 | ValueError |
-| 自我挑战 | **禁止** target_agent_id == agent_id | ValueError |
+| 自我挑战 | **多Agent禁止** target_agent_id == agent_id；**单Agent允许**（active_count == 1时允许自审） | ValueError（多Agent时） |
 | 重复提交 | **不检查** 同一agent可多次提交challenge | 允许 |
 
 #### submit_assumptions 重复提交检查
@@ -1189,17 +1194,30 @@ async def _verify_token(request: Request) -> None:
 | 端点 | 方法 | 认证 | 说明 |
 |------|------|------|------|
 | `/` | GET | 否 | Web UI HTML页面 |
-| `/api/sessions` | GET | 否 | 列出所有会话（含agent详情、clarity_score） |
+| `/api/sessions` | GET | 否 | 列出所有会话（支持limit/offset/status分页参数） |
 | `/api/sessions/{id}` | GET | 否 | 会话详情（_serialize_session格式） |
 | `/api/sessions/{id}/events` | GET(SSE) | 否 | 实时事件流（30秒keepalive） |
 | `/api/sessions/{id}/document` | GET | 否 | 设计文档内容 |
+| `/api/sessions/create` | POST | 是 | 创建新会话 |
+| `/api/sessions/{id}/submit-requirement` | POST | 是 | 提交需求 |
+| `/api/sessions/{id}/upload-requirement` | POST | 是 | 上传需求文件 |
+| `/api/sessions/{id}/add-requirement-delta` | POST | 是 | 追加需求增量 |
+| `/api/register-agent` | POST | 是 | 自动注册Agent（自动发现会话） |
+| `/api/sessions/{id}/register-agent` | POST | 是 | 注册Agent到指定会话 |
+| `/api/sessions/{id}/start-clarification` | POST | 是 | 启动澄清阶段 |
 | `/api/sessions/{id}/review-assumptions` | POST | 是 | 人类审核假设 |
 | `/api/sessions/{id}/approve-refined-requirement` | POST | 是 | 批准重写需求 |
 | `/api/sessions/{id}/resolve-question` | POST | 是 | 解决待决问题 |
 | `/api/sessions/{id}/human-decision` | POST | 是 | 人类决策（approve/reject/override） |
+| `/api/sessions/{id}/resolve-decision-point` | POST | 是 | 按分歧点决策 |
 | `/api/sessions/{id}/force-skip-clarification` | POST | 是 | 强制跳过澄清 |
 | `/api/sessions/{id}/check-stalled` | POST | 是 | 检测停滞 |
 | `/api/sessions/{id}/heartbeat/{agent_id}` | POST | 是 | 发送心跳 |
+| `/api/sessions/{id}/generate-document` | POST | 是 | 生成设计文档 |
+| `/api/sessions/{id}/archive` | POST | 是 | 归档会话 |
+| `/api/sessions/{id}/pause` | POST | 是 | 暂停会话 |
+| `/api/sessions/{id}/resume` | POST | 是 | 恢复会话 |
+| `/api/sessions/{id}` | DELETE | 是 | 删除已归档会话 |
 
 ### 9.4 human-decision API 请求体
 
@@ -1231,16 +1249,24 @@ rationale: string (仅override使用, 为空时fallback到reason值)
   "round": 1,
   "min_rounds": 4,
   "max_rounds": 8,
-  "agents": [{"agent_id": "...", "name": "...", "model": "...", "provider": "...", "perspective": "...", "is_active": true, "last_active_at": "..."}],
+  "agents": [{"agent_id": "...", "name": "...", "model": "...", "provider": "...", "agent_identity": "...", "client_type": "...", "runtime_mode": "...", "perspective": "...", "is_active": true, "last_active_at": "...", "last_active_ago": "5m ago"}],
   "requirement": {"problem_statement": "...", "constraints": [], "acceptance_criteria": [], "clarity_score": 0.0, "skip_clarification": false, "is_refined": false},
-  "merged_assumptions": [{"dimension": "...", "assumptions": [{"assumption_id": "...", "agent_id": "...", "assumption": "...", "confidence": 0.5, "alternatives": [...], "human_choice": ""}]}],
+  "assumptions": [{"assumption_id": "...", "agent_id": "...", "dimension": "...", "assumption": "...", "confidence": 0.5, "alternatives": [...], "human_choice": "", "clarify_round": 1}],
+  "merged_assumptions": [{"dimension": "...", "divergent": false, "assumptions": [{"assumption_id": "...", "agent_id": "...", "assumption": "...", "confidence": 0.5, "alternatives": [...], "human_choice": ""}]}],
   "refined_requirements": [{"refine_id": "...", "agent_id": "...", "refined_statement": "...(截断200字)"}],
-  "proposals": [{"proposal_id": "...", "agent_id": "...", "architecture": "...", "tech_stack": "...", "round": 1}],
-  "votes": [{"agent_id": "...", "vote_type": "...", "comment": "..."}],
+  "proposals": [{"proposal_id": "...", "agent_id": "...", "architecture": "...", "tech_stack": "...", "tradeoffs": "...", "risks": "...", "perspective": "...", "round": 1}],
+  "challenges": [{"challenge_id": "...", "agent_id": "...", "target_agent_id": "...", "target_proposal_id": "...", "risks": [...], "missing_considerations": [...], "category": "architecture", "priority": "medium", "round": 1}],
+  "revisions": [{"revision_id": "...", "agent_id": "...", "accepted_feedback": [...], "rejected_feedback": [...], "changed_design": "...", "round": 1}],
+  "optimizations": [{"optimization_id": "...", "agent_id": "...", "description": "...", "impact": "...", "tradeoff": "...", "round": 1}],
+  "devils_advocates": [{"da_id": "...", "agent_id": "...", "failure_modes": [...], "risk_score": 0.5, "mitigation": "...", "round": 1}],
+  "votes": [{"agent_id": "...", "vote_type": "...", "comment": "...", "round": 1}],
   "pending_questions": [{"question_id": "...", "asked_by": "...", "question": "...", "options": [...]}],
+  "decision_points": [{"decision_id": "...", "topic": "...", "description": "...", "options": [{"option_id": "...", "label": "...", "proposed_by": "...", "reasoning": "...", "pros": [...], "cons": [...]}], "constraints": [...], "human_choice": "", "human_custom": ""}],
   "events": [...],  // 最近100条
+  "phase_progress": [{"key": "clarify_identify", "label": "Identify", "status": "done|active|pending"}],
   "needs_human": false,
-  "human_actions": []  // 可能值: review_debate, review_assumptions, approve_refined_requirement, resolve_questions
+  "human_actions": [],  // 可能值: review_debate, review_assumptions, approve_refined_requirement, resolve_questions
+  "human_review_reason": ""
 }
 ```
 
