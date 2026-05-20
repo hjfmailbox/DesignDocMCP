@@ -447,6 +447,33 @@ class ConsensusVote(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
+#### DecisionOption
+
+```python
+class DecisionOption(BaseModel):
+    """决策点的一个选项"""
+    option_id: str
+    label: str                 # 选项名称，如"PostgreSQL"
+    proposed_by: str           # 提出该选项的Agent ID
+    reasoning: str = ""        # 理由
+    pros: list[str] = []       # 优点
+    cons: list[str] = []       # 缺点
+```
+
+#### DecisionPoint
+
+```python
+class DecisionPoint(BaseModel):
+    """一个具体的决策分歧点"""
+    decision_id: str
+    topic: str                 # 决策主题关键词
+    description: str           # 背景描述
+    options: list[DecisionOption] = []
+    constraints: list[str] = []
+    human_choice: str = ""
+    human_custom: str = ""
+```
+
 #### QuestionOption
 
 ```python
@@ -590,6 +617,20 @@ class Session(BaseModel):
 | `CLARITY_THRESHOLD` | 0.7 | 清晰度达标阈值 |
 | `AGENT_INACTIVE_TIMEOUT_SECONDS` | 300 | Agent不活跃超时（秒） |
 | `NOVELTY_THRESHOLD` | 0.15 | 新颖度阈值（engine.py） |
+
+#### 维度描述（DIMENSION_DESCRIPTIONS）
+
+```python
+DIMENSION_DESCRIPTIONS: dict[str, str] = {
+    "core_entities": "Focus on entities: objects, data models, relationships, attributes",
+    "users_and_permissions": "Focus on users: roles, permissions, access control, authentication",
+    "workflow_and_business_logic": "Focus on workflow: business rules, processes, state machines",
+    "non_functional_requirements": "Focus on NFRs: performance, security, reliability, scalability",
+    "integration_and_apis": "Focus on integration: APIs, third-party services, data exchange",
+    "tech_stack": "Focus on tech stack: languages, frameworks, databases, infrastructure",
+    "scope_boundary": "Focus on scope: MVP definition, phased delivery, out-of-scope items",
+}
+```
 
 ---
 
@@ -1043,6 +1084,15 @@ def _get_engine() -> CollaborationEngine:  # 懒初始化，依赖_get_store()
 | `wait_for_task` | `(session_id, agent_id, timeout=300) → dict` |
 | `submit_result` | `(session_id, agent_id, task_id, result) → dict` |
 
+#### 决策与生命周期
+
+| 工具 | 签名 |
+|------|------|
+| `submit_decision_points` | `(session_id, agent_id, decision_points) → dict` |
+| `resolve_decision_point` | `(session_id, decision_id, choice="", custom="") → dict` |
+| `deregister_agent` | `(session_id, agent_id) → dict` |
+| `delete_session` | `(session_id) → dict` |
+
 #### 问题与决策
 
 | 工具 | 签名 |
@@ -1096,6 +1146,21 @@ MCP端点URL:
   http模式: http://localhost:8765/mcp
   Web UI: http://localhost:8765/
 ```
+
+### 8.6 MCP Prompts
+
+| 名称 | 描述 | 用途 |
+|------|------|------|
+| `designdoc_guide` | 协作协议指南 | 为Agent提供完整的协作流程说明 |
+
+#### designdoc_guide
+
+返回 DesignDoc 协作的完整指南文本，包括：
+- 注册流程（/register → register_agent → heartbeat → get_phase_context）
+- 各阶段提交规则（Critic阶段需同时提交challenges和decision_points）
+- Runtime Loop（wait_for_task → process → submit_result 循环）
+- Rejoin机制（相同agent_identity自动恢复）
+- 禁止行为列表（禁止用户确认、禁止聊天模式等）
 
 ---
 

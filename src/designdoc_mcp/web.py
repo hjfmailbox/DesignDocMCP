@@ -429,6 +429,9 @@ def _serialize_session(session: Any) -> dict[str, Any]:
             "name": a.name,
             "model": a.model,
             "provider": a.provider,
+            "agent_identity": a.agent_identity,
+            "client_type": a.client_type,
+            "runtime_mode": a.runtime_mode,
             "perspective": a.current_perspective,
             "is_active": a.is_active,
             "last_active_at": a.last_active_at,
@@ -623,7 +626,7 @@ def _serialize_session(session: Any) -> dict[str, Any]:
             {
                 "refine_id": r.refine_id,
                 "agent_id": r.agent_id,
-                "refined_statement": r.refined_statement,
+                "refined_statement": r.refined_statement[:200] + "..." if len(r.refined_statement) > 200 else r.refined_statement,
             }
             for r in session.refined_requirements
         ] if session.refined_requirements else [],
