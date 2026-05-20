@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class DebatePhase(str, enum.Enum):
+    CREATED = "created"
     CLARIFY_IDENTIFY = "clarify_identify"
     CLARIFY_REFINE = "clarify_refine"
     CLARIFY_REVIEW = "clarify_review"
@@ -350,7 +351,7 @@ class Session(BaseModel):
     title: str
     description: str
     status: SessionStatus = SessionStatus.CREATED
-    current_phase: DebatePhase = DebatePhase.CLARIFY_IDENTIFY
+    current_phase: DebatePhase = DebatePhase.CREATED
     current_round: int = 1
     min_rounds: int = 4
     max_rounds: int = 8

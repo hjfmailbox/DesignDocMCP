@@ -238,6 +238,42 @@ def register_agent(
 
 
 @mcp.tool()
+def deregister_agent(session_id: str, agent_id: str) -> dict[str, Any]:
+    """Deregister an agent from a session. The agent becomes inactive.
+
+    Call this when user says /deregister or wants to leave a design discussion.
+    The agent will be marked as inactive and will no longer be counted for phase completion.
+
+    Args:
+        session_id: The session identifier
+        agent_id: The agent identifier to deregister
+
+    Returns:
+        Confirmation of deregistration
+    """
+    engine = _get_engine()
+    logger.info("deregister_agent called: session_id=%r, agent_id=%r", session_id, agent_id)
+    return engine.deregister_agent(session_id=session_id, agent_id=agent_id)
+
+
+@mcp.tool()
+def delete_session(session_id: str) -> dict[str, Any]:
+    """Delete an archived session and all its data.
+
+    Only archived sessions can be deleted. Active sessions must be archived first.
+
+    Args:
+        session_id: The session identifier to delete
+
+    Returns:
+        Confirmation of deletion
+    """
+    engine = _get_engine()
+    logger.info("delete_session called: session_id=%r", session_id)
+    return engine.delete_session(session_id=session_id)
+
+
+@mcp.tool()
 def start_clarification(session_id: str) -> dict[str, Any]:
     """Start the clarification phase to refine a fuzzy requirement.
 

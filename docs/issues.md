@@ -10,7 +10,7 @@
 |----------|------|------|
 | **P0 致命** | 3 | ✅ 已修复 |
 | **P1 高** | 5 | ✅ 已修复 5 / 📋 待修复 0 |
-| **P2 中** | 11 | ✅ 已修复 4 / 📋 待修复 7 |
+| **P2 中** | 11 | ✅ 已修复 9 / 📋 待修复 2 |
 | **P3 低** | 5 | 📋 待规划 |
 
 ---
@@ -255,11 +255,11 @@ Agent可能因为网络问题暂时离线，重新连接后需要同步错过的
 |------|--------|--------|------|
 | register_agent 阶段限制 | P1 | 低 | ✅ 已修复 |
 | human_reject 数据重置 | P1 | 中 | ✅ 已修复 |
-| Session 默认状态修正 | P2 | 低 | 📋 待修复 |
-| 数值字段范围校验 | P2 | 低 | 📋 待修复 |
-| 文档生成空架构处理 | P2 | 低 | 📋 待修复 |
-| CLARIFY_IDENTIFY 轮次过滤 | P2 | 低 | 📋 待修复 |
-| generate_design_document 状态检查 | P2 | 低 | 📋 待修复 |
+| Session 默认状态修正 | P2 | 低 | ✅ 已修复 |
+| 数值字段范围校验 | P2 | 低 | ✅ 已有约束 |
+| 文档生成空架构处理 | P2 | 低 | ✅ 已有占位 |
+| CLARIFY_IDENTIFY 轮次过滤 | P2 | 低 | ✅ 已修复 |
+| generate_design_document 状态检查 | P2 | 低 | ✅ 已有检查 |
 
 ### v1.2 — 性能与健壮性
 
@@ -268,8 +268,8 @@ Agent可能因为网络问题暂时离线，重新连接后需要同步错过的
 | get_session 增量加载（mtime检查） | P2 | 中 | ✅ 已修复 |
 | list_sessions 分页 | P2 | 中 | 📋 待修复 |
 | EventBus 线程安全 | P2 | 低 | ✅ 已修复 |
-| deregister_agent | P3 | 低 | 📋 待规划 |
-| delete_session MCP工具 | P3 | 低 | 📋 待规划 |
+| deregister_agent | P3 | 低 | ✅ 已实现 |
+| delete_session MCP工具 | P3 | 低 | ✅ 已实现 |
 | submit_challenge 目标验证 | P2 | 低 | ✅ 已修复 |
 | submit_assumptions 重复检查修复 | P2 | 低 | ✅ 已修复 |
 | _save 更新mtime缓存 | P2 | 低 | ✅ 已修复 |

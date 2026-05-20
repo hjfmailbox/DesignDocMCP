@@ -226,6 +226,34 @@ class CollaborationEngine:
         logger.info("register_agent: session updated and persisted, agents in session: %s", [a.agent_id for a in session.agents])
         return agent
 
+    def deregister_agent(self, session_id: str, agent_id: str) -> dict:
+        """Deregister an agent from a session. The agent becomes inactive."""
+        session = self._get(session_id)
+        agent = None
+        for a in session.agents:
+            if a.agent_id == agent_id:
+                agent = a
+                break
+        if agent is None:
+            raise ValueError(f"Agent '{agent_id}' not found in session '{session_id}'")
+        agent.is_active = False
+        agent.last_active_at = datetime.now(timezone.utc).isoformat()
+        self._add_event(session, EventType.SYSTEM_EVENT, agent_id, content=f"Agent {agent.name} deregistered")
+        self.store.update_session(session)
+        logger.info("deregister_agent: agent %s deregistered from session %s", agent_id, session_id)
+        # Check if phase completion is affected
+        self._check_phase_completion(session, force_active_only=True)
+        return {"action": "deregistered", "agent_id": agent_id, "session_id": session_id}
+
+    def delete_session(self, session_id: str) -> dict:
+        """Delete a session. Only ARCHIVED sessions can be deleted."""
+        session = self._get(session_id)
+        if session.status != SessionStatus.ARCHIVED:
+            raise ValueError(f"Only archived sessions can be deleted. Current status: {session.status.value}")
+        self.store.delete_session(session_id)
+        logger.info("delete_session: session %s deleted", session_id)
+        return {"action": "deleted", "session_id": session_id}
+
     def start_clarification(self, session_id: str) -> dict:
         session = self._get(session_id)
         if len(session.agents) < 2:
