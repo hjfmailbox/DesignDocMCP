@@ -114,10 +114,13 @@ class AgentInfo(BaseModel):
     name: str
     model: str = ""
     provider: str = ""
+    agent_identity: str = ""  # stable identity across reconnects (e.g. "cursor_cli_local_hash")
+    client_type: str = ""     # cursor / claude_code / atomcode / generic
     registered_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     last_active_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     is_active: bool = True
     current_perspective: str = ""
+    runtime_mode: str = "persistent_worker"  # persistent_worker / normal_worker
 
 AGENT_INACTIVE_TIMEOUT_SECONDS = 300
 

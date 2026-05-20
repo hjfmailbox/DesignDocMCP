@@ -251,9 +251,11 @@ async def register_agent_auto_api(request: Request, _auth=Depends(_verify_token)
     model = body.get("model", "")
     provider = body.get("provider", "")
     session_id = body.get("session_id", "")
+    agent_identity = body.get("agent_identity", "")
+    client_type = body.get("client_type", "")
     engine = _get_engine()
     try:
-        result = engine.register_agent(session_id=session_id, name=name, model=model, provider=provider)
+        result = engine.register_agent(session_id=session_id, name=name, model=model, provider=provider, agent_identity=agent_identity, client_type=client_type)
         if isinstance(result, dict):
             return result
         resolved_sid = session_id
@@ -262,11 +264,13 @@ async def register_agent_auto_api(request: Request, _auth=Depends(_verify_token)
             if len(active) == 1:
                 resolved_sid = active[0].session_id
         return {
-            "action": "registered",
+            "action": "rejoined" if getattr(result, "_rejoined", False) else "registered",
             "agent_id": result.agent_id,
             "session_id": resolved_sid,
             "name": result.name,
             "model": result.model,
+            "rejoined": getattr(result, "_rejoined", False),
+            "runtime_mode": result.runtime_mode,
         }
     except ValueError as e:
         return {"action": "error", "message": str(e)}
@@ -278,16 +282,20 @@ async def register_agent_api(session_id: str, request: Request, _auth=Depends(_v
     name = body.get("name", "")
     model = body.get("model", "")
     provider = body.get("provider", "")
+    agent_identity = body.get("agent_identity", "")
+    client_type = body.get("client_type", "")
     engine = _get_engine()
     try:
-        result = engine.register_agent(session_id=session_id, name=name, model=model, provider=provider)
+        result = engine.register_agent(session_id=session_id, name=name, model=model, provider=provider, agent_identity=agent_identity, client_type=client_type)
         if isinstance(result, dict):
             return result
         return {
-            "action": "registered",
+            "action": "rejoined" if getattr(result, "_rejoined", False) else "registered",
             "agent_id": result.agent_id,
             "name": result.name,
             "model": result.model,
+            "rejoined": getattr(result, "_rejoined", False),
+            "runtime_mode": result.runtime_mode,
         }
     except ValueError as e:
         return {"action": "error", "message": str(e)}

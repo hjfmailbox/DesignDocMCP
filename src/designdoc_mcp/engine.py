@@ -115,6 +115,8 @@ class CollaborationEngine:
         name: str = "",
         model: str = "",
         provider: str = "",
+        agent_identity: str = "",
+        client_type: str = "",
     ) -> AgentInfo | dict:
         if not name:
             name = f"Agent-{uuid.uuid4().hex[:6]}"
@@ -139,47 +141,87 @@ class CollaborationEngine:
                     })
                 return {"action": "choose_session", "message": "Multiple active sessions found. Choose one.", "sessions": sessions_info}
         session = self._get(session_id)
-        late_registration_phases = {
-            DebatePhase.CRITIC,
-            DebatePhase.REVISION,
-            DebatePhase.OPTIMIZATION,
-            DebatePhase.DEVILS_ADVOCATE,
-            DebatePhase.CONSENSUS,
-        }
-        if session.current_phase in late_registration_phases:
-            raise ValueError(
-                f"Cannot register new agents during {session.current_phase.value} phase. "
-                f"Register before Proposal phase or after human review."
-            )
-        if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
-            raise ValueError(f"Cannot register agents in {session.status.value} session")
-        base_id = name.lower().replace(" ", "_")
-        if model:
-            model_slug = model.lower().replace("-", "_").replace(".", "_").replace(" ", "_")
-            agent_id = f"{base_id}__{model_slug}"
-        else:
-            agent_id = base_id
-        agent = AgentInfo(
-            agent_id=agent_id,
-            name=name,
-            model=model,
-            provider=provider,
-        )
-        existing_ids = {a.agent_id for a in session.agents}
-        if agent_id in existing_ids:
-            old_perspective = ""
+
+        # --- Auto rejoin via stable identity ---
+        rejoined = False
+        if agent_identity:
             for a in session.agents:
-                if a.agent_id == agent_id:
-                    old_perspective = a.current_perspective
+                if a.agent_identity == agent_identity:
+                    # Rejoin: restore existing agent, update metadata
+                    a.name = name
+                    a.model = model or a.model
+                    a.provider = provider or a.provider
+                    a.client_type = client_type or a.client_type
+                    a.is_active = True
+                    a.last_active_at = datetime.now(timezone.utc).isoformat()
+                    a.runtime_mode = "persistent_worker"
+                    agent = a
+                    rejoined = True
+                    logger.info("register_agent: auto-rejoin via identity %s → agent %s", agent_identity, a.agent_id)
                     break
-            agent.current_perspective = old_perspective
-            session.agents = [a if a.agent_id != agent_id else agent for a in session.agents]
-            logger.info("register_agent: re-registering existing agent %s in session %s", agent_id, session_id)
-        else:
-            session.agents.append(agent)
-            logger.info("register_agent: new agent %s added to session %s (total: %d)", agent_id, session_id, len(session.agents))
+
+        if not rejoined:
+            # New registration: check phase restrictions
+            late_registration_phases = {
+                DebatePhase.CRITIC,
+                DebatePhase.REVISION,
+                DebatePhase.OPTIMIZATION,
+                DebatePhase.DEVILS_ADVOCATE,
+                DebatePhase.CONSENSUS,
+            }
+            if session.current_phase in late_registration_phases:
+                raise ValueError(
+                    f"Cannot register new agents during {session.current_phase.value} phase. "
+                    f"Register before Proposal phase or after human review."
+                )
+            if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
+                raise ValueError(f"Cannot register agents in {session.status.value} session")
+
+            # Generate agent_id from name (+ model if provided)
+            base_id = name.lower().replace(" ", "_")
+            if model:
+                model_slug = model.lower().replace("-", "_").replace(".", "_").replace(" ", "_")
+                agent_id = f"{base_id}__{model_slug}"
+            else:
+                agent_id = base_id
+
+            # Detect persistent capability
+            runtime_mode = "persistent_worker"
+            if client_type in ("cursor", "claude_code", "atomcode"):
+                runtime_mode = "persistent_worker"
+
+            agent = AgentInfo(
+                agent_id=agent_id,
+                name=name,
+                model=model,
+                provider=provider,
+                agent_identity=agent_identity or agent_id,
+                client_type=client_type,
+                runtime_mode=runtime_mode,
+            )
+
+            # Check if agent_id already exists (legacy rejoin by agent_id)
+            existing_ids = {a.agent_id for a in session.agents}
+            if agent_id in existing_ids:
+                old_perspective = ""
+                for a in session.agents:
+                    if a.agent_id == agent_id:
+                        old_perspective = a.current_perspective
+                        break
+                agent.current_perspective = old_perspective
+                session.agents = [a if a.agent_id != agent_id else agent for a in session.agents]
+                rejoined = True
+                logger.info("register_agent: re-registering existing agent %s in session %s", agent_id, session_id)
+            else:
+                session.agents.append(agent)
+                logger.info("register_agent: new agent %s added to session %s (total: %d)", agent_id, session_id, len(session.agents))
+
+        # Tag the agent with rejoin status for the caller
+        agent._rejoined = rejoined
+
         model_info = f" (model={model}, provider={provider})" if model else ""
-        self._add_event(session, EventType.SYSTEM_EVENT, agent_id, content=f"Agent {name}{model_info} registered")
+        action_word = "rejoined" if rejoined else "registered"
+        self._add_event(session, EventType.SYSTEM_EVENT, agent.agent_id, content=f"Agent {name}{model_info} {action_word}")
         self.store.update_session(session)
         logger.info("register_agent: session updated and persisted, agents in session: %s", [a.agent_id for a in session.agents])
         return agent

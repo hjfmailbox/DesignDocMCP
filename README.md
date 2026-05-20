@@ -229,9 +229,13 @@ Skill提供两个命令：
 
 ## Skill命令详解
 
-### `/register <session_id> [name] [model] [provider]`
+### `/register <session_id> [name] [model] [provider] [agent_identity] [client_type]`
 
-注册到指定会话（无需参数，自动检测）。注册后，每次被唤起时：
+注册到指定会话（无需参数，自动检测）。支持 **stable identity 自动 rejoin**：
+- 提供 `agent_identity` 时，如果匹配已有 agent，自动恢复（不创建新 agent）
+- 适合 Cursor CLI / Claude Code / AtomCode 等支持长时任务的客户端
+
+注册后，每次被唤起时：
 
 1. 调用 `heartbeat(session_id, agent_id)` 保持活跃
 2. 调用 `get_phase_context(session_id, agent_id)` 检测当前阶段

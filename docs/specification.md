@@ -45,6 +45,7 @@
 | configs/目录创建与参考配置 | 📋 未开始 | 2026-05-20 | — |
 | SQLite存储后端（sqlite_store.py） | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
 | Blocking-pull协议（wait_for_task/submit_result） | ✅ 已完成 | 2026-05-19 | 2026-05-19 |
+| Persistent Agent Runtime 架构（stable identity + auto rejoin） | ✅ 已完成 | 2026-05-20 | 2026-05-20 |
 
 ### 阶段四：健壮性提升 [未开始]
 
@@ -271,6 +272,9 @@ class AgentInfo(BaseModel):
     name: str                                        # 显示名称
     model: str = ""                                  # LLM模型标识
     provider: str = ""                               # 模型提供商
+    agent_identity: str = ""                         # stable identity across reconnects
+    client_type: str = ""                            # cursor / claude_code / atomcode / generic
+    runtime_mode: str = "persistent_worker"          # persistent_worker / normal_worker
     registered_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
     last_active_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC，提交/心跳时更新
     is_active: bool = True                           # 超时后标记为False
@@ -692,6 +696,11 @@ for i, agent in enumerate(session.agents):
 - **禁止注册的阶段**: CRITIC, REVISION, OPTIMIZATION, DEVILS_ADVOCATE, CONSENSUS
 - **禁止注册的状态**: COMPLETED, ARCHIVED
 - **重复注册**: 若agent_id已存在，保留`current_perspective`，替换其余字段
+- **返回值**:
+  - `rejoined: bool` — 是否为自动 rejoin
+  - `runtime_mode: str` — persistent_worker / normal_worker
+  - `phase: str` — 当前阶段
+  - `pending_task: dict | None` — 待处理任务
 
 ### 5.9 提交验证规则
 
@@ -754,7 +763,15 @@ for i, agent in enumerate(session.agents):
 - `status = COMPLETED`，记录 `completed_at`
 - 记录 `metadata["human_override"] = {decision, rationale, approver}`
 
-### 5.13 需求增量处理（add_requirement_delta）
+### 5.13 Auto Rejoin
+
+register_agent 支持通过 agent_identity 自动 rejoin：
+- 如果 agent_identity 匹配已有 agent → 恢复该 agent（更新 metadata，保留 perspective），返回 rejoined=true
+- 如果 agent_identity 不匹配 → 创建新 agent，返回 rejoined=false
+- Rejoin 不受 late_registration_phases 限制（已有 agent 可随时重新连接）
+- Rejoin 时保留 current_perspective，更新 is_active=True 和 last_active_at
+
+### 5.14 需求增量处理（add_requirement_delta）
 
 根据当前阶段和delta清晰度，返回不同的action：
 
@@ -766,7 +783,7 @@ for i, agent in enumerate(session.agents):
 | 其他(CREATED) | — | 清晰 | `auto_skip_clarification` | 可直接跳到辩论 |
 | 其他(CREATED) | — | 模糊 | `needs_clarification` | 需要澄清 |
 
-### 5.14 get_phase_context 响应结构
+### 5.15 get_phase_context 响应结构
 
 | 阶段 | 返回字段 |
 |------|---------|
@@ -783,7 +800,7 @@ for i, agent in enumerate(session.agents):
 
 所有阶段都包含: `phase`, `round`, `clarify_round`, `instruction`, `requirement`
 
-### 5.15 get_session_flow 响应结构
+### 5.16 get_session_flow 响应结构
 
 ```json
 {
@@ -979,11 +996,11 @@ def _get_engine() -> CollaborationEngine:  # 懒初始化，依赖_get_store()
 | 工具 | 签名 |
 |------|------|
 | `submit_requirement` | `(session_id, problem_statement, constraints=None, acceptance_criteria=None, open_questions=None, tech_preferences=None, forbidden_items=None) → dict` |
-| `register_agent` | `(session_id="", name="", model="", provider="") → dict` |
+| `register_agent` | `(session_id="", name="", model="", provider="", agent_identity="", client_type="") → dict` |
 | `add_requirement_delta` | `(session_id, delta_statement, constraints=None, acceptance_criteria=None) → dict` |
 | `force_skip_clarification` | `(session_id) → dict` |
 
-> register_agent 的 session_id 为空时自动选择唯一活跃会话
+> register_agent 的 session_id 为空时自动选择唯一活跃会话。agent_identity 为 stable identity，跨 reconnect 保持稳定。如果匹配已有 agent，自动 rejoin（不创建新 agent）。client_type 用于 runtime capability detection。
 
 #### 澄清阶段
 

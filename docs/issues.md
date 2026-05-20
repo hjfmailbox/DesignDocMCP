@@ -286,6 +286,43 @@ Agent可能因为网络问题暂时离线，重新连接后需要同步错过的
 | 多人审核 | P3 | 高 |
 | 操作回滚 | P3 | 高 |
 
+### v2.0 — 按分歧点决策（详见 [decision-points.md](decision-points.md)）
+
+| 任务 | 优先级 | 复杂度 | 依赖 |
+|------|--------|--------|------|
+| DecisionPoint/DecisionOption 数据模型 | P2 | 低 | — |
+| Session 添加 decision_points 字段 | P2 | 低 | 数据模型 |
+| Critic 阶段提交逻辑扩展 | P2 | 中 | 数据模型 |
+| _merge_decision_points 汇总去重 | P2 | 中 | Critic扩展 |
+| API 序列化 + /resolve-decision-point | P2 | 中 | 汇总逻辑 |
+| Critic 阶段提示词 + SKILL.md 更新 | P2 | 低 | Critic扩展 |
+| 前端决策卡片界面 | P2 | 高 | API |
+| 关联约束实时校验 | P3 | 高 | 前端界面 |
+| 一键采纳多数方案 | P3 | 低 | 前端界面 |
+
+### v2.1 — 存储与性能优化
+
+| 任务 | 优先级 | 复杂度 | 依赖 |
+|------|--------|--------|------|
+| SQLite 存储后端完善（事务、迁移） | P2 | 高 | sqlite_store.py |
+| list_sessions 分页 | P2 | 中 | — |
+| 关键常量环境变量化（第八节） | P2 | 低 | — |
+| Docker/start.sh 传输协议更新（SSE→HTTP） | P2 | 低 | — |
+| _serialize_session 响应结构规范化 | P2 | 中 | — |
+| web.py 缺失的10个API端点补录到spec | P2 | 低 | — |
+
+### v2.2 — 质量与可观测性
+
+| 任务 | 优先级 | 复杂度 | 依赖 |
+|------|--------|--------|------|
+| 日志分层（心跳独立文件） | P2 | 低 | — |
+| 新增 MCP Prompt: designdoc_guide 补录到spec | P2 | 低 | — |
+| 新增 MCP Resource: designdoc://active-session 补录到spec | P2 | 低 | — |
+| DIMENSION_DESCRIPTIONS 补录到spec | P3 | 低 | — |
+| PHASE_DESCRIPTIONS 细节同步 | P3 | 低 | — |
+| 单元测试覆盖率提升 | P2 | 高 | — |
+| Playwright E2E 测试 | P3 | 高 | — |
+
 ---
 
 ## 七、文档组织

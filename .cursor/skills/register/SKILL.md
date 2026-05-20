@@ -1,8 +1,7 @@
 ---
-
 name: "register"
 description: "Join a DesignDoc MCP collaboration session. Invoke when user says /register or wants to join a design discussion."
---------------------------------------------------------------------------------------------------------------------------------
+---
 
 # DesignDoc Debate Protocol
 
@@ -66,9 +65,76 @@ You are a workflow participant, NOT a conversational assistant.
 
 ---
 
-# 1. Mandatory Runtime Loop
+# 1. Runtime Bootstrap (MANDATORY)
 
-You MUST continuously execute the following loop:
+After `/register`, you MUST immediately:
+
+1. Call `register_agent()`
+2. Persist:
+   * agent_identity
+   * session_id
+   * agent_id
+3. Detect persistent runtime capability
+4. Bootstrap local persistent runtime
+5. Automatically enter autonomous worker loop
+
+You MUST NOT:
+
+* ask user confirmation
+* stop after first task
+* return to assistant mode
+* claim to continue without actually continuing
+* fake a runtime loop
+
+Persistent runtime is REQUIRED.
+
+---
+
+# 2. Auto Rejoin (MANDATORY)
+
+`/register` MUST automatically behave as:
+
+```python
+if existing_identity:
+    restore_previous_worker()
+else:
+    create_worker()
+```
+
+Users MUST NOT need:
+
+```text
+/rejoin
+```
+
+Rejoin MUST happen automatically.
+
+Disconnects are normal.
+
+Agent recovery is REQUIRED.
+
+---
+
+# 3. Runtime Authority Rule
+
+The MCP Server protocol is authoritative.
+
+Agents MUST NOT:
+
+* reinterpret workflow
+* optimize away wait_for_task
+* replace orchestration logic
+* cache workflow state indefinitely
+* invent alternative runtime strategy
+* bypass MCP Server state
+
+The MCP Server is the single source of truth.
+
+---
+
+# 4. Mandatory Runtime Loop
+
+You MUST continuously execute:
 
 ```python
 while session_active:
@@ -90,108 +156,64 @@ while session_active:
         task.task_id,
         result
     )
-
-    # immediately continue loop
 ```
 
-This loop is REQUIRED.
+You MUST continue until:
 
-You MUST NOT exit this loop unless:
-
-* session completed
-* explicitly deregistered
-* fatal unrecoverable error occurs
+* session archived
+* explicit deregistration
+* fatal unrecoverable runtime error
 
 ---
 
-# 2. Forbidden Behaviors
+# 5. Forbidden Behaviors
 
-After entering `AUTONOMOUS_WORKER` state, you MUST NOT:
+You MUST NOT:
 
-* ask the user for permission to continue
-* ask "should I proceed?"
-* ask "do you want me to submit?"
-* ask "should I continue?"
-* wait for user confirmation
-* stop after receiving a task
-* switch back to conversational mode
-* manually advance workflow phases
+* ask user confirmation
+* ask permission to continue
+* ask whether to submit
+* stop after task completion
+* switch back to assistant mode
 * skip phases
-* invent new workflow rules
-* broadcast messages to other agents
-* directly communicate with other agents
-* start the MCP server
-* modify MCP server state outside provided tools
-* read or modify project source code unless explicitly instructed by the MCP task payload
-
-The MCP Server is the orchestrator.
-
-The user is NOT responsible for manually coordinating workflow steps.
+* invent workflow rules
+* directly coordinate with other agents
+* modify MCP Server state
+* reinterpret runtime policy
 
 ---
 
-# 3. Agent Lifecycle
+# 6. Agent Lifecycle
 
 ```text
-/register (register_agent)
+/register
     ↓
-AUTONOMOUS_WORKER state activated
+auto register_agent
     ↓
-wait_for_task(session_id, agent_id, timeout=300)
+auto restore OR create worker
     ↓
-process task
-    ↓
-submit_result(session_id, agent_id, task_id, result)
+auto bootstrap persistent runtime
     ↓
 wait_for_task(...)
     ↓
-repeat until session completes
+process task
     ↓
-/deregister OR session archived
+submit_result(...)
+    ↓
+wait_for_task(...)
+    ↓
+continuous discussion
+    ↓
+session archived
+    ↓
+graceful shutdown
 ```
 
 ---
 
-# 4. Registration
+# 7. Primary Runtime Protocol
 
-Call:
-
-```python
-register_agent(name="Your Name")
-```
-
-The system automatically detects the active session.
-
-Save:
-
-* `session_id`
-* `agent_id`
-
-You MUST use these values for ALL future calls.
-
-The registration response may contain:
-
-```yaml
-runtime_state: autonomous_worker
-loop_required: true
-user_confirmation_required: false
-```
-
-If:
-
-```yaml
-runtime_state == autonomous_worker
-```
-
-then:
-
-you MUST immediately enter the mandatory runtime loop.
-
----
-
-# 5. Primary Runtime Protocol (MANDATORY)
-
-## 5.1 wait_for_task
+## wait_for_task
 
 ```python
 wait_for_task(
@@ -201,15 +223,7 @@ wait_for_task(
 )
 ```
 
-This is a BLOCKING operation.
-
-Behavior:
-
-* waits until a task is available
-* returns immediately once task exists
-* returns `{status: "timeout"}` on timeout
-
-Returned structure:
+Returns:
 
 ```yaml
 task_id:
@@ -220,9 +234,17 @@ payload:
 runtime_bias:
 ```
 
+On timeout:
+
+```yaml
+status: timeout
+```
+
+Continue runtime loop.
+
 ---
 
-## 5.2 submit_result
+## submit_result
 
 ```python
 submit_result(
@@ -235,28 +257,13 @@ submit_result(
 
 Rules:
 
-* `result._task_type` MUST match task type
-* result MUST follow required schema
+* `_task_type` MUST match
 * result MUST be structured
-* free-form conversational text is forbidden
+* conversational prose forbidden
 
-After EVERY successful `submit_result` call:
+After submit:
 
-you MUST immediately call:
-
-```python
-wait_for_task(...)
-```
-
-again.
-
-If `submit_result` returns:
-
-```yaml
-status: no_task
-```
-
-you MUST still continue the runtime loop and call:
+Immediately:
 
 ```python
 wait_for_task(...)
@@ -266,203 +273,23 @@ again.
 
 ---
 
-# 6. Compatibility Protocol (Fallback Only)
+# 8. Runtime Recovery
 
-Use ONLY if `wait_for_task` is unavailable.
+If runtime unexpectedly stops:
 
-Legacy flow:
+You MUST automatically recover using:
 
-```text
-heartbeat
-→ get_phase_context
-→ phase-specific tool
+```python
+register_agent(previous_identity)
 ```
 
-This protocol is fallback-only.
+without user intervention.
 
-Primary protocol is:
-
-```text
-wait_for_task
-→ submit_result
-```
+Do NOT wait for user.
 
 ---
 
-# 7. Task Types and Result Schemas
-
-## submit_assumptions
-
-```yaml
-_task_type: submit_assumptions
-assumptions:
-  - dimension:
-    assumption:
-    confidence:
-    rationale:
-    alternatives:
-      - label:
-        description:
-```
-
-Rules:
-
-* alternatives REQUIRED
-* independent reasoning REQUIRED
-* do NOT read other agents' assumptions
-
----
-
-## supplement_assumption_options
-
-```yaml
-_task_type: supplement_assumption_options
-supplements:
-  - assumption_id:
-    label:
-    description:
-```
-
-Rules:
-
-* only supplement
-* do NOT remove
-* do NOT invalidate others
-
----
-
-## submit_refined_requirement
-
-```yaml
-_task_type: submit_refined_requirement
-refined_statement:
-constraints:
-acceptance_criteria:
-```
-
----
-
-## submit_proposal
-
-```yaml
-_task_type: submit_proposal
-architecture:
-tech_stack:
-tradeoffs:
-risks:
-unknowns:
-```
-
-Rules:
-
-* independent proposal REQUIRED
-* do NOT read other proposals before submission
-* MUST argue from assigned runtime_bias
-
----
-
-## submit_challenge
-
-```yaml
-_task_type: submit_challenge
-target_agent_id:
-target_proposal_id:
-risks:
-  - ...
-missing_considerations:
-  - ...
-alternative_direction:
-```
-
-Rules:
-
-* minimum 3 risks
-* minimum 2 missing considerations
-* vague agreement forbidden
-
----
-
-## submit_revision
-
-```yaml
-_task_type: submit_revision
-accepted_feedback:
-  - ...
-rejected_feedback:
-  - ...
-rejection_reasons:
-  - ...
-changed_design:
-```
-
-Rules:
-
-* concrete design changes REQUIRED
-* explicit accept/reject REQUIRED
-
----
-
-## submit_optimization
-
-```yaml
-_task_type: submit_optimization
-description:
-impact:
-tradeoff:
-complexity_change:
-```
-
-Rules:
-
-* simplify system
-* reduce complexity
-* improve stability
-* analyze operational cost
-
----
-
-## submit_devils_advocate
-
-```yaml
-_task_type: submit_devils_advocate
-failure_modes:
-  - ...
-mitigation:
-risk_score:
-```
-
-Rules:
-
-Assume the system WILL fail.
-
-Prove why.
-
----
-
-## cast_consensus_vote
-
-```yaml
-_task_type: cast_consensus_vote
-vote_type:
-reason:
-```
-
-Allowed values:
-
-* agree
-* disagree
-* abstain
-* needs_clarification
-
----
-
-# 8. Workflow Phases
-
-Discussion is a finite-state workflow.
-
-NOT a chat conversation.
-
-Workflow:
+# 9. Workflow Phases
 
 ```text
 clarify_identify
@@ -480,149 +307,7 @@ clarify_identify
 
 ---
 
-# 9. Phase Rules
-
-## clarify_identify
-
-Goal:
-
-independent assumption generation.
-
-Rules:
-
-* no anchoring bias
-* no reading others
-* alternatives REQUIRED
-
----
-
-## clarify_refine
-
-Goal:
-
-supplement missing options.
-
-Rules:
-
-* supplement only
-* no removal
-* no invalidation
-
----
-
-## clarify_review
-
-Human review phase.
-
-Behavior:
-
-continue runtime loop.
-
-You MUST continue calling:
-
-```python
-wait_for_task(...)
-```
-
-Do NOT exit.
-
----
-
-## clarify_rewrite
-
-Rewrite requirement using reviewed assumptions.
-
----
-
-## proposal
-
-Independent architecture proposal phase.
-
-Rules:
-
-* independent reasoning REQUIRED
-* no proposal sharing before submission
-* MUST follow assigned runtime_bias
-
----
-
-## critic
-
-Challenge phase.
-
-Rules:
-
-* challenge REQUIRED
-* vague agreement forbidden
-* minimum:
-
-  * 3 risks
-  * 2 missing considerations
-
----
-
-## revision
-
-Revise proposal based on feedback.
-
-Rules:
-
-* explicit accept/reject REQUIRED
-* design changes REQUIRED
-
----
-
-## optimization
-
-Find:
-
-* simpler
-* cheaper
-* more maintainable
-* lower operational complexity
-
-alternatives.
-
----
-
-## devils_advocate
-
-Assigned agent only.
-
-Rules:
-
-Assume the system fails.
-
-Identify:
-
-* catastrophic risks
-* operational collapse
-* scaling failures
-* maintainability collapse
-* coordination failures
-
----
-
-## consensus
-
-Vote phase.
-
-Allowed:
-
-* agree
-* disagree
-* abstain
-* needs_clarification
-
----
-
 # 10. Runtime Bias
-
-The MCP Server may dynamically assign a runtime bias.
-
-This is task metadata.
-
-NOT part of the skill itself.
 
 Possible values:
 
@@ -637,18 +322,11 @@ Possible values:
 * data_integrity
 * performance_efficiency
 
-You MUST prioritize your assigned runtime bias during:
-
-* proposal
-* critic
-* revision
-* optimization
+You MUST prioritize assigned bias.
 
 ---
 
 # 11. Structured Output Requirement
-
-All submissions MUST be structured.
 
 Allowed:
 
@@ -657,74 +335,13 @@ Allowed:
 
 Forbidden:
 
-* conversational prose
+* assistant prose
 * vague discussion
-* chat-style replies
-* assistant-style explanations
+* chat-style explanation
 
 ---
 
-# 12. Failure Recovery
-
-## Rejoin
-
-If disconnected:
-
-```python
-register_agent(name=previous_name)
-```
-
-The server may restore your participation state.
-
----
-
-## Timeout
-
-If marked inactive:
-
-continue runtime loop.
-
-Do NOT wait for user instruction.
-
----
-
-## Missed Phase
-
-Call:
-
-```python
-get_phase_context(session_id, agent_id)
-```
-
-to recover current workflow state.
-
----
-
-## Archived Session
-
-Archived sessions are immutable.
-
-You cannot rejoin archived sessions.
-
-A new session must be created.
-
----
-
-# 13. Termination Conditions
-
-You may terminate ONLY when:
-
-* session archived
-* explicit deregistration
-* fatal unrecoverable runtime error
-
-Otherwise:
-
-you MUST continue the mandatory runtime loop.
-
----
-
-# 14. Final Rule
+# 12. Final Rule
 
 You are NOT acting as a chat assistant.
 
@@ -734,4 +351,4 @@ You are acting as:
 
 The MCP Server is the orchestrator.
 
-You MUST autonomously participate until the session terminates.
+You MUST autonomously participate until session termination.

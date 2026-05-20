@@ -166,30 +166,39 @@ def register_agent(
     name: str = "",
     model: str = "",
     provider: str = "",
+    agent_identity: str = "",
+    client_type: str = "",
 ) -> dict[str, Any]:
     """Register yourself to a collaboration session. Call this when user says /register.
 
     All parameters are optional. The system will auto-detect:
     - If session_id is omitted: auto-joins the only active session, or returns a list to choose from
     - If name is omitted: defaults to "Agent"
-    - model and provider are optional metadata
+    - agent_identity: stable identity across reconnects (e.g. "cursor_cli_local_hash")
+    - client_type: your client type (cursor / claude_code / atomcode / generic)
+
+    If agent_identity matches an existing agent, you will auto-rejoin (not create a new agent).
 
     Args:
         session_id: The session to join (omit to auto-discover)
-        name: Your display name (e.g., "Claude Code", "Kimi")
+        name: Your display name (e.g., "Claude Code", "Cursor Composer Agent")
         model: Your model identifier (e.g., "claude-3.5-sonnet")
         provider: Your provider (e.g., "anthropic")
+        agent_identity: Stable identity for auto-rejoin across reconnects
+        client_type: Client type for runtime capability detection
 
     Returns:
-        Agent registration info, or a list of sessions to choose from
+        Agent registration info with rejoined/runtime_mode/phase/pending_task
     """
     engine = _get_engine()
-    logger.info("register_agent called: session_id=%r, name=%r, model=%r, provider=%r", session_id, name, model, provider)
+    logger.info("register_agent called: session_id=%r, name=%r, identity=%r, client_type=%r", session_id, name, agent_identity, client_type)
     result = engine.register_agent(
         session_id=session_id,
         name=name,
         model=model,
         provider=provider,
+        agent_identity=agent_identity,
+        client_type=client_type,
     )
     if isinstance(result, dict):
         logger.info("register_agent returned dict (choose/error): %s", result.get("action"))
@@ -201,7 +210,10 @@ def register_agent(
             resolved_sid = active[0].session_id
     data = result.model_dump()
     data["session_id"] = resolved_sid
-    logger.info("register_agent success: agent_id=%s, session_id=%s", result.agent_id, resolved_sid)
+    data["rejoined"] = getattr(result, "_rejoined", False)
+    data["runtime_mode"] = result.runtime_mode
+    data["phase"] = result.current_perspective or ""
+    logger.info("register_agent success: agent_id=%s, session_id=%s, rejoined=%s", result.agent_id, resolved_sid, data["rejoined"])
 
     # 自动执行 heartbeat + get_phase_context，让 agent 立即进入协作状态
     try:
@@ -209,9 +221,18 @@ def register_agent(
         phase_ctx = engine.get_phase_context(resolved_sid, result.agent_id)
         data["auto_heartbeat"] = "ok"
         data["phase_context"] = phase_ctx
+        data["phase"] = phase_ctx.get("current_phase", data["phase"]) if isinstance(phase_ctx, dict) else data["phase"]
+        # Check for pending task
+        try:
+            session = engine._get(resolved_sid)
+            pending = engine.store._get_pending_task(resolved_sid, result.agent_id)
+            data["pending_task"] = pending if pending else None
+        except Exception:
+            data["pending_task"] = None
     except Exception as e:
         logger.warning("register_agent auto-advance failed: %s", e)
         data["auto_heartbeat"] = f"failed: {e}"
+        data["pending_task"] = None
 
     return data
 
