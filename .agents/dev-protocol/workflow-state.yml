@@ -14,8 +14,8 @@ state:
   active_work: none_detected
   blockers: none_detected
   last_activity:
-    commit: "32e96d8"
-    message: "fix: sync Docker transport config in spec docs (sse→http)"
+    commit: "aacc1d8"
+    message: "chore: /dev-checkpoint - transport config sync + dev-protocol state update"
     date: "2026-05-23"
 
 version_tracking:
@@ -41,6 +41,9 @@ git:
   branch: master
   base_branch: main
   untracked_files:
+    - .agents/skills/dev-bootstrap (symlink)
+    - .agents/skills/dev-checkpoint (symlink)
+    - .agents/skills/dev-resume (symlink)
     - tests/case-05-first-checkpoint/
     - tests/case-06-goal-workflow/
     - tests/run-tests.ps1

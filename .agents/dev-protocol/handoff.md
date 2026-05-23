@@ -8,9 +8,9 @@ DesignDoc MCP 是一个 MCP 驱动的多智能体设计文档协作系统。多�
 ## 当前状态
 
 - **分支**: `master` (基于 `main`)
-- **最新提交**: `32e96d8` - fix: sync Docker transport config in spec docs (sse→http)
-- **未跟踪文件**: 3 个（测试计划：case-05, case-06, run-tests.ps1）
-- **未提交变更**: 无
+- **最新提交**: `aacc1d8` - chore: /dev-checkpoint - transport config sync + dev-protocol state update
+- **未跟踪文件**: 6 个（3 个符号链接 + 3 个测试计划）
+- **未提交变更**: 3 个符号链接（dev-bootstrap, dev-checkpoint, dev-resume）
 
 ## 已完成阶段
 
@@ -44,7 +44,7 @@ DesignDoc MCP 是一个 MCP 驱动的多智能体设计文档协作系统。多�
 ## 工作空间注意事项
 
 - `.agents/dev-protocol/` 目录已初始化，之前为空
-- `.agents/skills/` 包含 deregister 和 register 技能
+- `.agents/skills/` 包含 deregister、register 技能 + 3 个符号链接（指向 dev-protocol/skills）
 - 用户记忆位于 `C:\Users\Administrator\.claude\projects\D--Codes-Personal-DesignDocMCP\memory\`
 - MEMORY.md 索引仅 1 条记录：DesignDoc MCP 连接规范
 
