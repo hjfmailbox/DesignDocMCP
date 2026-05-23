@@ -21,5 +21,8 @@ logs/
 # Claude Code runtime artifacts
 .claude/scheduled_tasks.lock
 
+# Claude Code Skills
+.claude/skills/
+
 # AtomCode runtime artifacts
 .atomcode/graph.bin
