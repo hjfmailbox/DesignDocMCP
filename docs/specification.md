@@ -1456,13 +1456,13 @@ COPY pyproject.toml .
 COPY src/ src/
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e .
 ENV DESIGNDOC_DATA_DIR=/data
-ENV DESIGNDOC_TRANSPORT=sse
+ENV DESIGNDOC_TRANSPORT=http
 ENV DESIGNDOC_HOST=0.0.0.0
 ENV DESIGNDOC_PORT=8765
 ENV PATH="/app/.venv/bin:$PATH"
 VOLUME ["/data"]
 EXPOSE 8765
-ENTRYPOINT ["designdoc-mcp", "--transport", "sse", "--host", "0.0.0.0", "--port", "8765"]
+ENTRYPOINT ["designdoc-mcp", "--transport", "http", "--host", "0.0.0.0", "--port", "8765"]
 ```
 
 **docker-compose.yml**:
@@ -1477,7 +1477,7 @@ services:
       - designdoc-data:/data
     environment:
       - DESIGNDOC_DATA_DIR=/data
-      - DESIGNDOC_TRANSPORT=sse
+      - DESIGNDOC_TRANSPORT=http
       - DESIGNDOC_HOST=0.0.0.0
       - DESIGNDOC_PORT=8765
     restart: unless-stopped
