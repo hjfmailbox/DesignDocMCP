@@ -8,8 +8,8 @@ DesignDoc MCP 是一个 MCP 驱动的多智能体设计文档协作系统。多�
 ## 当前状态
 
 - **分支**: `master` (基于 `main`)
-- **最新提交**: `54df8cc` - docs: sync specification with code implementation
-- **未跟踪文件**: 3 个（.claude/skills/ 下的 dev 协议技能文件）
+- **最新提交**: `32e96d8` - fix: sync Docker transport config in spec docs (sse→http)
+- **未跟踪文件**: 3 个（测试计划：case-05, case-06, run-tests.ps1）
 - **未提交变更**: 无
 
 ## 已完成阶段
@@ -23,7 +23,6 @@ DesignDoc MCP 是一个 MCP 驱动的多智能体设计文档协作系统。多�
 ## 待完成任务
 
 ### 阶段三遗留
-- [ ] Docker/start.sh 传输协议更新（SSE→HTTP）
 - [ ] .trae/mcp.json 配置更新
 - [ ] configs/ 目录创建与参考配置
 
