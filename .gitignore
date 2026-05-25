@@ -22,7 +22,8 @@ logs/
 .claude/scheduled_tasks.lock
 
 # Claude Code Skills
-.claude/skills/
+# Note: dev-protocol v2 runtime skills are tracked as symlinks
+# .claude/skills/
 
 # AtomCode runtime artifacts
 .atomcode/graph.bin
