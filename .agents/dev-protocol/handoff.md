@@ -10,6 +10,7 @@ Last updated by /dev-save on 2026-05-26.
 - **Branch**: master
 - **Workspace**: clean
 - **Protocol State**: v2 runtime active, two workflow loops validated
+- **Current Focus**: see `current-focus.md`
 
 ## Completed Work
 
