@@ -318,6 +318,8 @@ async def generate_document_api(session_id: str, _auth=Depends(_verify_token)):
     session = store.get_session(session_id)
     if session is None:
         return {"error": "Session not found"}
+    if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
+        return {"error": f"Session is in '{session.status.value}' status. Please complete the debate before generating the design document."}
     doc = generate_design_document(session)
     return {"document": doc}
 

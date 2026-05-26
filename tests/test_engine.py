@@ -280,15 +280,22 @@ class TestClarityRewriteAutoAdvance:
 
 
 class TestGenerateDesignDocumentStateCheck:
-    def test_cannot_generate_from_created_state(self, engine, session_with_agents):
-        """测试 generate_design_document 在非完成状态下返回提示"""
+    def test_document_generation_for_created_session(self, engine, session_with_agents):
+        """document.py 不检查状态，空 session 仍能生成包含标题的文档"""
         sid = session_with_agents.session_id
-        # 直接使用 document 模块函数测试（不通过 server 模块的全局 store）
         session = engine.store.get_session(sid)
         result = generate_design_document(session)
-        # 文档生成不检查状态，但 server 层会检查
-        # 这里验证文档内容在空 session 下是合理的
         assert "Test Session" in result
+
+    def test_server_rejects_created_status(self, engine):
+        """server.py 的 generate_design_document 在 CREATED 状态返回提示"""
+        import designdoc_mcp.server as server_module
+        session = engine.create_session(title="Server Test", description="Test")
+        # 注入测试 store 到 server 模块全局变量
+        server_module._store = engine.store
+        result = server_module.generate_design_document(session.session_id)
+        assert "not found" not in result.lower()
+        assert "complete the debate" in result.lower() or "CREATED" in result
 
 
 class TestDocumentEmptyArchitecture:
@@ -636,3 +643,5 @@ class TestDebatePhaseCreated:
         session = engine.create_session(title="New Session", description="Test")
         assert session.current_phase == DebatePhase.CREATED
         assert session.status == SessionStatus.CREATED
+
+
