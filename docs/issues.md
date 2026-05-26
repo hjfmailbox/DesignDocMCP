@@ -89,25 +89,25 @@
 
 ## 三、待修复问题
 
-### P2-1: Session 默认状态不一致
+### P2-1: Session 默认状态不一致 ✅
 
-**文件**: `models.py` | **优先级**: 中
+**文件**: `models.py` | **优先级**: 中 | **修复**: 2026-05-20
 
 **问题**: `status` 默认 `CREATED`，但 `current_phase` 默认 `CLARIFY_IDENTIFY`，语义矛盾。
 
 **修复方案**: `current_phase` 默认值改为 `CREATED` 对应的初始值，或增加 `NOT_STARTED` 阶段
 
-### P2-2: 数值字段无范围校验
+### P2-2: 数值字段无范围校验 ✅
 
-**文件**: `models.py` | **优先级**: 中
+**文件**: `models.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: `confidence`、`risk_score` 等字段可传入负数或大于1的值。
 
 **修复方案**: 使用 `Field(ge=0.0, le=1.0)` 约束
 
-### P2-3: 文档生成空架构
+### P2-3: 文档生成空架构 ✅
 
-**文件**: `document.py` | **优先级**: 中
+**文件**: `document.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: 无 proposals/revisions 时，"Final Architecture" 标题下完全空白。
 
@@ -129,29 +129,29 @@
 
 **修复方案**: 引入文件修改时间检查（`st_mtime`），仅在文件变更时重新加载
 
-### P2-6: list_sessions 每次重载所有 session
+### P2-6: list_sessions 每次重载所有 session ✅
 
-**文件**: `store.py` | **优先级**: 中
+**文件**: `store.py` | **优先级**: 中 | **修复**: 2026-05-20
 
 **问题**: 每次调用都重新读取所有 JSON 文件，无分页支持。
 
-**修复方案**: 增量加载 + 分页参数
+**修复方案**: 已添加 `limit` / `offset` 分页参数
 
-### P2-7: _check_phase_completion 中 CLARIFY_IDENTIFY 重复计算
+### P2-7: _check_phase_completion 中 CLARIFY_IDENTIFY 重复计算 ✅
 
-**文件**: `engine.py` | **优先级**: 中
+**文件**: `engine.py` | **优先级**: 中 | **修复**: 2026-05-19
 
 **问题**: 统计所有轮次的 assumptions 而非仅当前轮次，可能导致提前推进。
 
-**修复方案**: 按 `clarify_round` 过滤
+**修复方案**: 已按 `clarify_round` 过滤
 
-### P2-8: generate_design_document 不验证 session 状态
+### P2-8: generate_design_document 不验证 session 状态 ✅
 
-**文件**: `document.py` | **优先级**: 中
+**文件**: `web.py` | **优先级**: 中 | **修复**: 2026-05-26
 
 **问题**: 可以在 CREATED 状态就生成文档，产出不完整输出。
 
-**修复方案**: 检查 session 状态，未完成时返回提示信息
+**修复方案**: 已在 `POST /generate-document` 端点添加状态检查，非 `COMPLETED` / `HUMAN_REVIEW` 状态返回提示信息
 
 ### P2-9: submit_challenge 无目标验证 ✅
 
@@ -259,14 +259,14 @@ Agent可能因为网络问题暂时离线，重新连接后需要同步错过的
 | 数值字段范围校验 | P2 | 低 | ✅ 已有约束 |
 | 文档生成空架构处理 | P2 | 低 | ✅ 已有占位 |
 | CLARIFY_IDENTIFY 轮次过滤 | P2 | 低 | ✅ 已修复 |
-| generate_design_document 状态检查 | P2 | 低 | ✅ 已有检查 |
+| generate_design_document 状态检查 | P2 | 低 | ✅ 已修复 |
 
 ### v1.2 — 性能与健壮性
 
 | 任务 | 优先级 | 复杂度 | 状态 |
 |------|--------|--------|------|
 | get_session 增量加载（mtime检查） | P2 | 中 | ✅ 已修复 |
-| list_sessions 分页 | P2 | 中 | 📋 待修复 |
+| list_sessions 分页 | P2 | 中 | ✅ 已实现 |
 | EventBus 线程安全 | P2 | 低 | ✅ 已修复 |
 | deregister_agent | P3 | 低 | ✅ 已实现 |
 | delete_session MCP工具 | P3 | 低 | ✅ 已实现 |
