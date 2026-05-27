@@ -638,6 +638,142 @@ class TestSingleAgentSelfReview:
         assert challenge is not None
 
 
+class TestConsensusPaths:
+    def test_abstain_leads_to_completion(self, engine):
+        """1 AGREE + 1 ABSTAIN → COMPLETED"""
+        session = engine.create_session(title="Abstain Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        p_alpha = [p for p in session.proposals if p.agent_id == "alpha"][0]
+        p_beta = [p for p in session.proposals if p.agent_id == "beta"][0]
+
+        engine.submit_challenge(sid, "alpha", "beta", p_beta.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+        engine.submit_challenge(sid, "beta", "alpha", p_alpha.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+
+        engine.submit_revision(sid, "alpha", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="A2")
+        engine.submit_revision(sid, "beta", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="B2")
+
+        engine.submit_optimization(sid, "alpha", description="opt")
+        engine.submit_optimization(sid, "beta", description="opt")
+
+        da = engine.store.get_session(sid).devils_advocate_agent
+        engine.submit_devils_advocate(sid, da, failure_modes=["f"], risk_score=0.5)
+
+        session = engine.store.get_session(sid)
+        assert session.current_phase == DebatePhase.CONSENSUS
+
+        engine.cast_consensus_vote(sid, "alpha", VoteType.AGREE, "Yes")
+        engine.cast_consensus_vote(sid, "beta", VoteType.ABSTAIN, "Pass")
+
+        session = engine.store.get_session(sid)
+        assert session.status == SessionStatus.COMPLETED
+
+    def test_three_way_split_goes_to_human_review(self, engine):
+        """1 AGREE + 1 DISAGREE + 1 NEEDS_CLARIFICATION → HUMAN_REVIEW"""
+        session = engine.create_session(title="Split Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+        engine.register_agent(sid, name="Gamma")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+        engine.submit_proposal(sid, "gamma", architecture="C")
+
+        session = engine.store.get_session(sid)
+        p_alpha = [p for p in session.proposals if p.agent_id == "alpha"][0]
+        p_beta = [p for p in session.proposals if p.agent_id == "beta"][0]
+        p_gamma = [p for p in session.proposals if p.agent_id == "gamma"][0]
+
+        engine.submit_challenge(sid, "alpha", "beta", p_beta.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+        engine.submit_challenge(sid, "beta", "gamma", p_gamma.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+        engine.submit_challenge(sid, "gamma", "alpha", p_alpha.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+
+        engine.submit_revision(sid, "alpha", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="A2")
+        engine.submit_revision(sid, "beta", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="B2")
+        engine.submit_revision(sid, "gamma", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="C2")
+
+        engine.submit_optimization(sid, "alpha", description="opt")
+        engine.submit_optimization(sid, "beta", description="opt")
+        engine.submit_optimization(sid, "gamma", description="opt")
+
+        da = engine.store.get_session(sid).devils_advocate_agent
+        engine.submit_devils_advocate(sid, da, failure_modes=["f"], risk_score=0.5)
+
+        session = engine.store.get_session(sid)
+        assert session.current_phase == DebatePhase.CONSENSUS
+
+        engine.cast_consensus_vote(sid, "alpha", VoteType.AGREE, "Yes")
+        engine.cast_consensus_vote(sid, "beta", VoteType.DISAGREE, "No")
+        engine.cast_consensus_vote(sid, "gamma", VoteType.NEEDS_CLARIFICATION, "Maybe")
+
+        session = engine.store.get_session(sid)
+        assert session.status == SessionStatus.HUMAN_REVIEW
+
+
+class TestHumanRejectReset:
+    def test_reject_increments_round_and_resets_to_proposal(self, engine):
+        """human_reject 后 round +1，phase 回到 PROPOSAL，status 变为 PROPOSAL"""
+        session = engine.create_session(title="Reject Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        p_alpha = [p for p in session.proposals if p.agent_id == "alpha"][0]
+        p_beta = [p for p in session.proposals if p.agent_id == "beta"][0]
+
+        engine.submit_challenge(sid, "alpha", "beta", p_beta.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+        engine.submit_challenge(sid, "beta", "alpha", p_alpha.proposal_id, risks=["r1", "r2", "r3"], missing_considerations=["m1", "m2"])
+
+        engine.submit_revision(sid, "alpha", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="A2")
+        engine.submit_revision(sid, "beta", accepted_feedback=["r1"], rejected_feedback=["r2"], rejection_reasons=["no"], changed_design="B2")
+
+        engine.submit_optimization(sid, "alpha", description="opt")
+        engine.submit_optimization(sid, "beta", description="opt")
+
+        da = engine.store.get_session(sid).devils_advocate_agent
+        engine.submit_devils_advocate(sid, da, failure_modes=["f"], risk_score=0.5)
+
+        session = engine.store.get_session(sid)
+        assert session.current_phase == DebatePhase.CONSENSUS
+
+        engine.cast_consensus_vote(sid, "alpha", VoteType.AGREE, "Yes")
+        engine.cast_consensus_vote(sid, "beta", VoteType.DISAGREE, "No")
+
+        session = engine.store.get_session(sid)
+        assert session.status == SessionStatus.HUMAN_REVIEW
+        old_round = session.current_round
+
+        engine.human_reject(sid, approver="human", reason="Needs more work")
+
+        session = engine.store.get_session(sid)
+        assert session.status == SessionStatus.PROPOSAL
+        assert session.current_phase == DebatePhase.PROPOSAL
+        assert session.current_round == old_round + 1
+
+
 class TestDebatePhaseCreated:
     def test_new_session_has_created_phase(self, engine):
         session = engine.create_session(title="New Session", description="Test")
