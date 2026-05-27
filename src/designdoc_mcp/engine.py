@@ -1245,6 +1245,74 @@ class CollaborationEngine:
         logger.info("resume_session: session %s resumed to %s", session_id, previous_status)
         return {"session_id": session_id, "status": session.status.value, "resumed_from": previous_status}
 
+    def revert_to_event(self, session_id: str, event_id: str) -> dict:
+        """Revert session state to a specific event point using the event log."""
+        session = self._get(session_id)
+
+        target_index = None
+        for i, event in enumerate(session.events):
+            if event.event_id == event_id:
+                target_index = i
+                break
+
+        if target_index is None:
+            raise ValueError(f"Event '{event_id}' not found in session")
+
+        target_event = session.events[target_index]
+        target_time = target_event.created_at
+
+        # Truncate event log
+        session.events = session.events[:target_index + 1]
+
+        # Truncate data lists by created_at
+        session.assumptions = [a for a in session.assumptions if a.created_at <= target_time]
+        session.refined_requirements = [r for r in session.refined_requirements if r.created_at <= target_time]
+        session.proposals = [p for p in session.proposals if p.created_at <= target_time]
+        session.challenges = [c for c in session.challenges if c.created_at <= target_time]
+        session.revisions = [r for r in session.revisions if r.created_at <= target_time]
+        session.optimizations = [o for o in session.optimizations if o.created_at <= target_time]
+        session.devils_advocates = [d for d in session.devils_advocates if d.created_at <= target_time]
+        session.consensus_votes = [v for v in session.consensus_votes if v.created_at <= target_time]
+        session.pending_questions = [q for q in session.pending_questions if q.created_at <= target_time]
+
+        # Clear derived state that can be regenerated
+        session.merged_assumptions = []
+        session.clarify_refine_submitted = []
+        session.devils_advocate_agent = ""
+        session.novelty_scores = []
+
+        # Reset phase and round
+        session.current_phase = target_event.phase
+        session.current_round = target_event.round_number
+
+        # Infer status from remaining events
+        session.status = SessionStatus(target_event.phase.value)
+        for event in reversed(session.events):
+            if event.event_type == EventType.SYSTEM_EVENT:
+                content = event.content
+                if "waiting for human approval" in content or "moved to human review" in content or "escalated to human review" in content:
+                    session.status = SessionStatus.HUMAN_REVIEW
+                    break
+                if "Consensus reached" in content or "Full consensus" in content:
+                    session.status = SessionStatus.COMPLETED
+                    break
+                if "Auto-advanced" in content:
+                    try:
+                        session.status = SessionStatus(session.current_phase.value)
+                    except ValueError:
+                        session.status = SessionStatus.CREATED
+                    break
+
+        if session.status != SessionStatus.COMPLETED:
+            session.completed_at = None
+        if session.status != SessionStatus.ARCHIVED:
+            session.archived_at = None
+
+        self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Reverted to event {event_id}")
+        self.store.update_session(session)
+        logger.info("revert_to_event: session %s reverted to event %s", session_id, event_id)
+        return {"session_id": session_id, "reverted_to": event_id, "phase": session.current_phase.value, "status": session.status.value}
+
     def get_session_flow(self, session_id: str) -> dict:
         session = self._get(session_id)
 

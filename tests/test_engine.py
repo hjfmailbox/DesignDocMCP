@@ -774,6 +774,95 @@ class TestHumanRejectReset:
         assert session.current_round == old_round + 1
 
 
+class TestRevertToEvent:
+    def test_revert_truncates_events_and_data(self, engine):
+        """回退到指定 event 后，events 和数据列表被截断"""
+        session = engine.create_session(title="Revert Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        proposals_before = len(session.proposals)
+        events_before = len(session.events)
+        target_event = session.events[-3]  # 回退到倒数第 3 个 event
+
+        engine.revert_to_event(sid, target_event.event_id)
+
+        session = engine.store.get_session(sid)
+        assert len(session.events) < events_before
+        assert len(session.proposals) < proposals_before
+        assert all(e.created_at <= target_event.created_at for e in session.events[:-1])
+
+    def test_revert_resets_phase_and_status(self, engine):
+        """回退后 phase/round/status 重置为目标 event 对应的状态"""
+        session = engine.create_session(title="Revert Phase Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        # 推进到 PROPOSAL 之后
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        assert session.current_phase == DebatePhase.CRITIC
+
+        # 找到 PROPOSAL 阶段的最后一个 event
+        proposal_events = [e for e in session.events if e.phase == DebatePhase.PROPOSAL]
+        target_event = proposal_events[-1]
+
+        engine.revert_to_event(sid, target_event.event_id)
+
+        session = engine.store.get_session(sid)
+        assert session.current_phase == DebatePhase.PROPOSAL
+        assert session.current_round == target_event.round_number
+        assert session.status == SessionStatus.PROPOSAL
+
+    def test_revert_clears_derived_state(self, engine):
+        """回退后派生状态被清空"""
+        session = engine.create_session(title="Revert Derived Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        target_event = session.events[-2]
+
+        engine.revert_to_event(sid, target_event.event_id)
+
+        session = engine.store.get_session(sid)
+        assert session.merged_assumptions == []
+        assert session.clarify_refine_submitted == []
+        assert session.devils_advocate_agent == ""
+        assert session.novelty_scores == []
+
+    def test_revert_to_missing_event_raises(self, engine):
+        """回退到不存在的 event 应该抛出 ValueError"""
+        session = engine.create_session(title="Revert Error Test", description="Test")
+        sid = session.session_id
+        with pytest.raises(ValueError, match="not found"):
+            engine.revert_to_event(sid, "nonexistent-event-id")
+
+
 class TestDebatePhaseCreated:
     def test_new_session_has_created_phase(self, engine):
         session = engine.create_session(title="New Session", description="Test")

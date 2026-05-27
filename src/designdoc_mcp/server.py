@@ -349,6 +349,21 @@ def resume_session(session_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def revert_to_event(session_id: str, event_id: str) -> dict[str, Any]:
+    """Revert session state to a specific event point using the event log.
+
+    Args:
+        session_id: The session identifier
+        event_id: The event identifier to revert to
+
+    Returns:
+        Confirmation with reverted phase and status
+    """
+    engine = _get_engine()
+    return engine.revert_to_event(session_id=session_id, event_id=event_id)
+
+
+@mcp.tool()
 def start_clarification(session_id: str) -> dict[str, Any]:
     """Start the clarification phase to refine a fuzzy requirement.
 
