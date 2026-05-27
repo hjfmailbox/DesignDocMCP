@@ -9,7 +9,7 @@ Last updated by /dev-save on 2026-05-27.
 - **Phase**: unknown (onboarding completed, phase to be set by user or /dev-status)
 - **Branch**: master
 - **Workspace**: clean
-- **Protocol State**: v2 runtime active, four workflow loops validated, next-phase plan established
+- **Protocol State**: v2 runtime active, six workflow loops validated, next-phase plan Loops 1-3 complete
 - **Current Focus**: see `current-focus.md` and `next-phase-plan.md`
 
 ## Completed Work
@@ -28,31 +28,40 @@ Last updated by /dev-save on 2026-05-27.
 ### Second Workflow Loop (Doc Sync)
 - **P2 Doc Sync**: Marked 6 resolved P2 issues as fixed in `issues.md`
 - Corrected implementation plan table (list_sessions pagination, generate_document status)
-- Eliminated "documentation lying" — no fixed issues remain as active issues
+- Eliminated "documentation lying"
 
 ### Third Workflow Loop (Planning)
 - **Current Focus Anchor**: Created `.agents/dev-protocol/current-focus.md`
 - **Next-Phase Plan**: Created `docs/next-phase-plan.md` with 10-loop execution queue
-- Defined phase exit criteria (test count >= 50, no P1/P2 issues unaddressed, docs aligned)
 
 ### Fourth Workflow Loop (Spec Sync — Loop 1 of Plan)
 - **Specification Status Sync**: Flipped 6 tasks from 未开始 to 已完成 in `specification.md`
 - Fixed stage-four heading from [未开始] to [已完成]
-- Verified against Dockerfile, docker-compose.yml, .trae/mcp.json, configs/, document.py, engine.py
 - 37 tests passing, no source code modified
+
+### Fifth Workflow Loop (Issues Sync — Loop 2 of Plan)
+- **Issues.md Status Sync**: Fixed P2 count (9/2 → 11/0), flipped 5 P3/scenario items from pending to completed
+- Verified against server.py MCP tool registrations
+- 37 tests passing, no source code modified
+
+### Sixth Workflow Loop (CLARIFY_REWRITE Verify — Loop 3 of Plan)
+- **CLARIFY_REWRITE Auto-Advance Verified**: Code logic correct — completion detected, advances to HUMAN_REVIEW (not PROPOSAL), waiting for human approval as designed
+- Existing test coverage confirmed (`test_engine.py:276-279`)
+- No code fix required
+- Identified latent risk: `RefinedRequirement` lacks `round_number`/`clarify_round` field; harmless under current single-pass architecture but could affect multi-round clarification in future
 
 ## Current Focus
 
-Loop 1 of next-phase plan complete (specification.md synced). See `next-phase-plan.md` for remaining 9 loops.
+Loops 1-3 of next-phase plan complete. Ready for Loop 4: test coverage improvement (consensus deadlock, ABSTAIN, human_reject round reset).
 
 ## Next Recommended Actions
 
-1. Continue **Loop 2**: `issues.md` sync (audit P2 count, sync P3 prose with implementation tables)
+1. Continue **Loop 4**: Add tests for consensus deadlock paths, ABSTAIN handling, `human_reject` round reset
 2. Or run `/dev-scope` for a new goal outside the plan
 3. Or run `/dev-status` to verify state recoverability
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` defines 10 loops. Loop 1 done. Prefer continuing sequential loop execution.
-- `current-focus.md` remains the authority on why this project is being worked on right now.
+- `next-phase-plan.md` defines 10 loops. Loops 1-3 done.
+- `current-focus.md` remains the authority on project purpose.
 - No blockers. Workspace is clean. Ready for next loop.
