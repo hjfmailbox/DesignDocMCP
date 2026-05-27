@@ -10,7 +10,7 @@
 |----------|------|------|
 | **P0 致命** | 3 | ✅ 已修复 |
 | **P1 高** | 5 | ✅ 已修复 5 / 📋 待修复 0 |
-| **P2 中** | 11 | ✅ 已修复 9 / 📋 待修复 2 |
+| **P2 中** | 11 | ✅ 已修复 11 / 📋 待修复 0 |
 | **P3 低** | 5 | 📋 待规划 |
 
 ---
@@ -181,17 +181,13 @@
 
 ## 四、待规划功能
 
-### P3-1: Agent 主动退出
+### P3-1: Agent 主动退出 ✅
 
-当前没有 `deregister_agent` 操作。Agent 只能通过超时被动变为 inactive。
+`deregister_agent` MCP 工具已实现。Agent 可主动退出，系统自动触发 `_check_phase_completion`。
 
-**方案**: 新增 `deregister_agent` 工具，将 agent 标记为 inactive 并触发 `_check_phase_completion`
+### P3-2: Session 暂停/恢复 ✅
 
-### P3-2: Session 暂停/恢复
-
-长时间运行的协作可能需要暂停（如午休、隔天继续）。
-
-**方案**: 新增 `pause_session` / `resume_session`，暂停时冻结超时计时器
+`pause_session` / `resume_session` MCP 工具已实现。暂停时冻结超时计时器，恢复后继续运行。
 
 ### P3-3: 导出格式多样化
 
@@ -199,11 +195,9 @@
 
 **方案**: 集成 `pandoc` 或 `weasyprint` 支持多格式导出
 
-### P3-4: Session 删除
+### P3-4: Session 删除 ✅
 
-`store.delete_session` 存在但未暴露为 MCP 工具。
-
-**方案**: 新增 `delete_session` MCP 工具
+`delete_session` MCP 工具已实现。仅允许删除 ARCHIVED 状态的 session。
 
 ### P3-5: 操作回滚/撤销
 
@@ -215,11 +209,9 @@
 
 ## 五、被忽略的使用场景
 
-### 场景 A: 单Agent自审
+### 场景 A: 单Agent自审 ✅
 
-当前要求至少2个Agent。但有时用户希望单个Agent对自己提出的方案进行自我审视。
-
-**方案**: 允许1个Agent启动，自动分配2个不同视角，Agent从两个视角分别提交proposal
+已支持单Agent自审模式。1个Agent启动时自动分配2个不同视角，Agent从两个视角分别提交proposal。
 
 ### 场景 B: 渐进式需求
 
@@ -233,11 +225,9 @@
 
 **方案**: 新增 `compare_sessions` 工具，生成对比文档
 
-### 场景 D: 离线Agent
+### 场景 D: 离线Agent ✅
 
-Agent可能因为网络问题暂时离线，重新连接后需要同步错过的事件。
-
-**方案**: `get_session_flow` 返回指定事件ID之后的事件，Agent可增量同步
+已有 rejoin 机制支持。Agent 提供 `agent_identity` 时可自动恢复连接，同步错过的状态。
 
 ### 场景 E: 多人审核
 
