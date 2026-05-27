@@ -7,6 +7,17 @@ import logging
 
 from fastmcp import FastMCP
 
+from .constants import (
+    DEFAULT_CHALLENGE_CATEGORY,
+    DEFAULT_CHALLENGE_PRIORITY,
+    DEFAULT_CONFIDENCE,
+    DEFAULT_MAX_ROUNDS,
+    DEFAULT_MIN_ROUNDS,
+    DEFAULT_VOTE_TYPE,
+    WAIT_FOR_TASK_MAX_TIMEOUT,
+    WAIT_FOR_TASK_MIN_TIMEOUT,
+    WAIT_FOR_TASK_TIMEOUT,
+)
 from .document import generate_debate_summary, generate_design_document as _generate_design_document, generate_adr, generate_full_output, generate_human_decision_points
 from .engine import CollaborationEngine
 from .models import DebatePhase, SessionStatus, VoteType
@@ -44,7 +55,7 @@ def _get_engine() -> CollaborationEngine:
 
 
 @mcp.tool()
-def create_session(title: str, description: str, min_rounds: int = 4, max_rounds: int = 8) -> dict[str, Any]:
+def create_session(title: str, description: str, min_rounds: int = DEFAULT_MIN_ROUNDS, max_rounds: int = DEFAULT_MAX_ROUNDS) -> dict[str, Any]:
     """Create a new design document collaboration session.
 
     The session starts in CLARIFY_IDENTIFY phase. Submit a requirement, register agents,
@@ -205,7 +216,7 @@ def register_agent(
         return result
     resolved_sid = session_id
     if not resolved_sid:
-        active = [s for s in engine.store.list_sessions() if s.status.value not in ("archived", "completed")]
+        active = [s for s in engine.store.list_sessions() if s.status not in (SessionStatus.ARCHIVED, SessionStatus.COMPLETED)]
         if len(active) == 1:
             resolved_sid = active[0].session_id
     data = result.model_dump()
@@ -680,9 +691,9 @@ def submit_challenge(
     risks: list[str],
     missing_considerations: list[str],
     alternative_proposal: str = "",
-    category: str = "architecture",
-    priority: str = "medium",
-    confidence: float = 0.5,
+    category: str = DEFAULT_CHALLENGE_CATEGORY,
+    priority: str = DEFAULT_CHALLENGE_PRIORITY,
+    confidence: float = DEFAULT_CONFIDENCE,
 ) -> dict[str, Any]:
     """Submit a challenge against another agent's proposal during the CRITIC phase.
 
@@ -1097,7 +1108,7 @@ def heartbeat(session_id: str, agent_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def wait_for_task(session_id: str, agent_id: str, timeout: int = 300) -> dict[str, Any]:
+def wait_for_task(session_id: str, agent_id: str, timeout: int = WAIT_FOR_TASK_TIMEOUT) -> dict[str, Any]:
     """Blocking pull: wait for the next task assigned to this agent.
 
     This is the CORE protocol of the system. Instead of polling or being pushed,
@@ -1120,7 +1131,7 @@ def wait_for_task(session_id: str, agent_id: str, timeout: int = 300) -> dict[st
         Or {"status": "timeout"} if no task available within timeout
     """
     engine = _get_engine()
-    actual_timeout = min(max(timeout, 1), 600)
+    actual_timeout = min(max(timeout, WAIT_FOR_TASK_MIN_TIMEOUT), WAIT_FOR_TASK_MAX_TIMEOUT)
     task = engine.wait_for_task_engine(session_id, agent_id, timeout=float(actual_timeout))
     if task is None:
         return {"status": "timeout"}
@@ -1268,7 +1279,7 @@ def list_sessions_resource() -> str:
         if len(active) == 1:
             lines.append("")
             lines.append(f"Only one active session. You can register directly: /register {active[0].session_id}")
-    archived = [s for s in sessions if s.status.value in ("archived", "completed")]
+    archived = [s for s in sessions if s.status in (SessionStatus.ARCHIVED, SessionStatus.COMPLETED)]
     if archived:
         lines.append("")
         lines.append(f"== {len(archived)} archived/completed session(s) (hidden) ==")

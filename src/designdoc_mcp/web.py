@@ -16,6 +16,7 @@ from .engine import CollaborationEngine
 from .events import event_bus
 from .models import DebatePhase, SessionStatus, VoteType
 from .store import SessionStore
+from .constants import DEFAULT_MAX_ROUNDS, DEFAULT_MIN_ROUNDS, SSE_KEEPALIVE_SECONDS
 from .document import generate_design_document
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -119,7 +120,7 @@ async def session_event_stream(session_id: str):
         try:
             while True:
                 try:
-                    payload = await asyncio.wait_for(queue.get(), timeout=30)
+                    payload = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_SECONDS)
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     yield f": keepalive\n\n"
@@ -220,8 +221,8 @@ async def create_session_api(request: Request, _auth=Depends(_verify_token)):
     body = await request.json()
     title = body.get("title", "")
     description = body.get("description", "")
-    min_rounds = body.get("min_rounds", 4)
-    max_rounds = body.get("max_rounds", 8)
+    min_rounds = body.get("min_rounds", DEFAULT_MIN_ROUNDS)
+    max_rounds = body.get("max_rounds", DEFAULT_MAX_ROUNDS)
     if not title:
         return {"error": "title is required"}
     engine = _get_engine()
@@ -261,7 +262,7 @@ async def register_agent_auto_api(request: Request, _auth=Depends(_verify_token)
             return result
         resolved_sid = session_id
         if not resolved_sid:
-            active = [s for s in engine.store.list_sessions() if s.status.value not in ("archived", "completed")]
+            active = [s for s in engine.store.list_sessions() if s.status not in (SessionStatus.ARCHIVED, SessionStatus.COMPLETED)]
             if len(active) == 1:
                 resolved_sid = active[0].session_id
         return {

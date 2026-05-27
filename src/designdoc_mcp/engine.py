@@ -14,6 +14,26 @@ from .clarity_config import (
     MAX_LENGTH_BONUS,
     validate_config,
 )
+from .constants import (
+    ACTION_AUTO_SKIP_CLARIFICATION,
+    ACTION_DELTA_APPENDED_TO_DEBATE,
+    ACTION_DELTA_CLEAR_NO_CLARIFICATION_NEEDED,
+    ACTION_DELTA_NEEDS_CLARIFICATION,
+    ACTION_NEEDS_CLARIFICATION,
+    ACTION_REJOINED,
+    ACTION_REGISTERED,
+    ASSUMPTION_SIMILARITY_THRESHOLD,
+    CONSENSUS_PARTIAL_AGREEMENT_MIN,
+    CONSENSUS_SEVERE_DISAGREEMENT_THRESHOLD,
+    DEFAULT_CHALLENGE_CATEGORY,
+    DEFAULT_CHALLENGE_PRIORITY,
+    DEFAULT_CONFIDENCE,
+    DEFAULT_MAX_ROUNDS,
+    DEFAULT_MIN_ROUNDS,
+    DEFAULT_VOTE_TYPE,
+    NOVELTY_THRESHOLD,
+    TASK_POLL_TIMEOUT,
+)
 from .events import event_bus
 
 logger = logging.getLogger(__name__)
@@ -56,8 +76,6 @@ from .models import (
 )
 from .store import SessionStore
 
-NOVELTY_THRESHOLD = 0.15
-
 
 class CollaborationEngine:
     def __init__(self, store: SessionStore):
@@ -68,8 +86,8 @@ class CollaborationEngine:
         self,
         title: str,
         description: str,
-        min_rounds: int = 4,
-        max_rounds: int = 8,
+        min_rounds: int = DEFAULT_MIN_ROUNDS,
+        max_rounds: int = DEFAULT_MAX_ROUNDS,
     ) -> Session:
         session = Session(
             session_id=uuid.uuid4().hex[:12],
@@ -123,7 +141,7 @@ class CollaborationEngine:
         if not name:
             name = f"Agent-{uuid.uuid4().hex[:6]}"
         if not session_id:
-            active = [s for s in self.store.list_sessions() if s.status.value not in ("archived", "completed")]
+            active = [s for s in self.store.list_sessions() if s.status not in (SessionStatus.ARCHIVED, SessionStatus.COMPLETED)]
             if len(active) == 0:
                 logger.warning("register_agent: no active sessions found")
                 return {"action": "error", "message": "No active sessions. Create one via the Web UI at http://localhost:8765"}
@@ -222,7 +240,7 @@ class CollaborationEngine:
         agent._rejoined = rejoined
 
         model_info = f" (model={model}, provider={provider})" if model else ""
-        action_word = "rejoined" if rejoined else "registered"
+        action_word = ACTION_REJOINED if rejoined else ACTION_REGISTERED
         self._add_event(session, EventType.SYSTEM_EVENT, agent.agent_id, content=f"Agent {name}{model_info} {action_word}")
         self.store.update_session(session)
         logger.info("register_agent: session updated and persisted, agents in session: %s", [a.agent_id for a in session.agents])
@@ -273,7 +291,7 @@ class CollaborationEngine:
         self.store.update_session(session)
         return {
             "session_id": session_id,
-            "phase": "clarify_identify",
+            "phase": DebatePhase.CLARIFY_IDENTIFY.value,
             "clarify_round": 1,
             "instruction": PHASE_DESCRIPTIONS[DebatePhase.CLARIFY_IDENTIFY],
             "dimensions": ASSUMPTION_DIMENSIONS,
@@ -323,7 +341,7 @@ class CollaborationEngine:
         self.store.update_session(session)
         return {
             "session_id": session_id,
-            "phase": "proposal",
+            "phase": DebatePhase.PROPOSAL.value,
             "action": "clarification_skipped",
             "reason": f"Requirement clarity score {session.requirement.clarity_score:.2f} exceeds threshold {CLARITY_THRESHOLD}",
             "clarity_dimensions": session.requirement.clarity_dimensions,
@@ -410,7 +428,7 @@ class CollaborationEngine:
             DebatePhase.DEVILS_ADVOCATE,
             DebatePhase.CONSENSUS,
         ):
-            result["action"] = "delta_appended_to_debate"
+            result["action"] = ACTION_DELTA_APPENDED_TO_DEBATE
             result["current_phase"] = session.current_phase.value
             result["message"] = "Delta appended to existing debate. Agents should consider the new requirement in ongoing discussion."
         elif session.current_phase in (
@@ -420,20 +438,20 @@ class CollaborationEngine:
             DebatePhase.CLARIFY_REWRITE,
         ):
             if delta_req.skip_clarification:
-                result["action"] = "delta_clear_no_clarification_needed"
+                result["action"] = ACTION_DELTA_CLEAR_NO_CLARIFICATION_NEEDED
                 result["message"] = "Delta is clear enough. Continue current clarification for the base requirement."
             else:
-                result["action"] = "delta_needs_clarification"
+                result["action"] = ACTION_DELTA_NEEDS_CLARIFICATION
                 result["message"] = "Delta is fuzzy. Agents should also submit assumptions about the delta during current clarification."
                 result["delta_dimensions_to_clarify"] = [
                     dim for dim, covered in delta_req.clarity_dimensions.items() if not covered
                 ]
         else:
             if session.requirement.skip_clarification:
-                result["action"] = "auto_skip_clarification"
+                result["action"] = ACTION_AUTO_SKIP_CLARIFICATION
                 result["message"] = "Combined requirement is clear enough. Can start clarification to skip directly to PROPOSAL."
             else:
-                result["action"] = "needs_clarification"
+                result["action"] = ACTION_NEEDS_CLARIFICATION
                 result["message"] = "Combined requirement needs clarification. Start clarification to refine."
                 result["dimensions_to_clarify"] = [
                     dim for dim, covered in session.requirement.clarity_dimensions.items() if not covered
@@ -582,7 +600,7 @@ class CollaborationEngine:
         if not a_words or not b_words:
             return False
         overlap = len(a_words & b_words) / max(len(a_words), len(b_words))
-        return overlap > 0.5
+        return overlap > ASSUMPTION_SIMILARITY_THRESHOLD
 
     def review_assumptions(
         self,
@@ -701,7 +719,7 @@ class CollaborationEngine:
         self.store.update_session(session)
         return {
             "session_id": session_id,
-            "phase": "proposal",
+            "phase": DebatePhase.PROPOSAL.value,
             "round": 1,
             "instruction": PHASE_DESCRIPTIONS[DebatePhase.PROPOSAL],
             "perspectives": {a.agent_id: a.current_perspective for a in session.agents},
@@ -765,9 +783,9 @@ class CollaborationEngine:
         risks: list[str],
         missing_considerations: list[str],
         alternative_proposal: str = "",
-        category: str = "architecture",
-        priority: str = "medium",
-        confidence: float = 0.5,
+        category: str = DEFAULT_CHALLENGE_CATEGORY,
+        priority: str = DEFAULT_CHALLENGE_PRIORITY,
+        confidence: float = DEFAULT_CONFIDENCE,
     ) -> Challenge:
         session = self._get(session_id)
         self._validate_phase(session, DebatePhase.CRITIC)
@@ -1108,7 +1126,7 @@ class CollaborationEngine:
         return {
             "session_id": session_id,
             "round": session.current_round,
-            "phase": "critic",
+            "phase": DebatePhase.CRITIC.value,
             "instruction": PHASE_DESCRIPTIONS[DebatePhase.CRITIC],
         }
 
@@ -1762,11 +1780,11 @@ class CollaborationEngine:
             session.status = SessionStatus.COMPLETED
             session.completed_at = datetime.now(timezone.utc).isoformat()
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Consensus reached with {abstains} abstention(s)")
-        elif disagrees >= 2 or needs_clarification >= 2:
+        elif disagrees >= CONSENSUS_SEVERE_DISAGREEMENT_THRESHOLD or needs_clarification >= CONSENSUS_SEVERE_DISAGREEMENT_THRESHOLD:
             session.status = SessionStatus.HUMAN_REVIEW
             session.metadata["human_review_reason"] = f"Consensus failed: {disagrees} disagree, {needs_clarification} need clarification"
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Consensus failed, moved to human review")
-        elif (disagrees + needs_clarification) >= 1 and agrees >= 1:
+        elif (disagrees + needs_clarification) >= CONSENSUS_PARTIAL_AGREEMENT_MIN and agrees >= CONSENSUS_PARTIAL_AGREEMENT_MIN:
             session.status = SessionStatus.HUMAN_REVIEW
             session.metadata["human_review_reason"] = f"Partial consensus: {agrees} agree, {disagrees} disagree, {needs_clarification} need clarification, {abstains} abstain"
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Partial consensus, moved to human review")
@@ -1950,9 +1968,9 @@ class CollaborationEngine:
                     risks=result.get("risks", []),
                     missing_considerations=result.get("missing_considerations", []),
                     alternative_proposal=result.get("alternative_proposal", ""),
-                    category=result.get("category", "architecture"),
-                    priority=result.get("priority", "medium"),
-                    confidence=result.get("confidence", 0.5),
+                    category=result.get("category", DEFAULT_CHALLENGE_CATEGORY),
+                    priority=result.get("priority", DEFAULT_CHALLENGE_PRIORITY),
+                    confidence=result.get("confidence", DEFAULT_CONFIDENCE),
                 )
             elif task_type == "submit_revision":
                 self.submit_revision(
@@ -1978,7 +1996,7 @@ class CollaborationEngine:
                     mitigation=result.get("mitigation", ""),
                 )
             elif task_type == "cast_consensus_vote":
-                vote_type_str = result.get("vote_type", "agree")
+                vote_type_str = result.get("vote_type", DEFAULT_VOTE_TYPE)
                 self.cast_consensus_vote(
                     session_id, agent_id,
                     vote_type=VoteType(vote_type_str),
@@ -1989,7 +2007,7 @@ class CollaborationEngine:
             return {"status": "error", "message": str(e)}
 
         # 返回下一个任务
-        next_task = self.store.wait_for_task(agent_id, timeout=0.1)
+        next_task = self.store.wait_for_task(agent_id, timeout=TASK_POLL_TIMEOUT)
         return next_task or {"status": "no_task"}
 
     def _get(self, session_id: str) -> Session:
