@@ -9,7 +9,7 @@ Last updated by /dev-save on 2026-05-27.
 - **Phase**: unknown (onboarding completed, phase to be set by user or /dev-status)
 - **Branch**: master
 - **Workspace**: clean
-- **Protocol State**: v2 runtime active, six workflow loops validated, next-phase plan Loops 1-3 complete
+- **Protocol State**: v2 runtime active, seven workflow loops validated, next-phase plan Loops 1-4 complete
 - **Current Focus**: see `current-focus.md` and `next-phase-plan.md`
 
 ## Completed Work
@@ -50,18 +50,25 @@ Last updated by /dev-save on 2026-05-27.
 - No code fix required
 - Identified latent risk: `RefinedRequirement` lacks `round_number`/`clarify_round` field; harmless under current single-pass architecture but could affect multi-round clarification in future
 
+### Seventh Workflow Loop (Test Coverage — Loop 4 of Plan)
+- **Consensus Path Tests**: Added 3 tests covering ABSTAIN → COMPLETED, 3-way split → HUMAN_REVIEW
+- **Human Reject Reset Test**: Added test verifying `human_reject` increments round, resets phase/status to PROPOSAL
+- Test count: 37 → 40
+- All tests passing
+
 ## Current Focus
 
-Loops 1-3 of next-phase plan complete. Ready for Loop 4: test coverage improvement (consensus deadlock, ABSTAIN, human_reject round reset).
+Loops 1-4 of next-phase plan complete. Ready for Loop 5: implement basic undo/rollback (`revert_to_event`).
 
 ## Next Recommended Actions
 
-1. Continue **Loop 4**: Add tests for consensus deadlock paths, ABSTAIN handling, `human_reject` round reset
+1. Continue **Loop 5**: Implement basic undo/rollback using existing event log
 2. Or run `/dev-scope` for a new goal outside the plan
 3. Or run `/dev-status` to verify state recoverability
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` defines 10 loops. Loops 1-3 done.
+- `next-phase-plan.md` defines 10 loops. Loops 1-4 done.
 - `current-focus.md` remains the authority on project purpose.
+- Phase-exit success signal: test count >= 50. Current: 40. Need 10 more tests or defer to next phase.
 - No blockers. Workspace is clean. Ready for next loop.
