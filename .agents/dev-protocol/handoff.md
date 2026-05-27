@@ -9,7 +9,7 @@ Last updated by /dev-save on 2026-05-27.
 - **Phase**: unknown (onboarding completed, phase to be set by user or /dev-status)
 - **Branch**: master
 - **Workspace**: clean
-- **Protocol State**: v2 runtime active, eight workflow loops validated, next-phase plan Loops 1-5 complete
+- **Protocol State**: v2 runtime active, nine workflow loops validated, next-phase plan Loops 1-6 complete
 - **Current Focus**: see `current-focus.md` and `next-phase-plan.md`
 
 ## Completed Work
@@ -67,19 +67,27 @@ Last updated by /dev-save on 2026-05-27.
 - Test count: 40 → 44
 - **Documented Limitation**: Added docstring noting this is not deterministic replay; full replay would require per-event snapshots or precise side-effect replay
 
+### Ninth Workflow Loop (API Audit — Loop 6 of Plan)
+- **REST Endpoint Audit**: Compared `specification.md` §9.3 against `web.py` implementations
+- **Result**: All 25 spec-defined routes present and correctly implemented
+- **Auth Consistency**: GET endpoints open, POST/DELETE endpoints require token (matches spec §9.2)
+- **Behavior Verification**: `human-decision` action mapping, `generate-document` status guard, SSE keepalive all aligned with spec
+- **No source code modified**
+- 44 tests passing
+
 ## Current Focus
 
-Loops 1-5 of next-phase plan complete. Ready for Loop 6: API behavior audit (web.py endpoints vs specification alignment).
+Loops 1-6 of next-phase plan complete. Ready for Loop 7: constant externalization (`AGENT_INACTIVE_TIMEOUT_SECONDS`, `CLARITY_THRESHOLD`, etc. from models.py to env vars).
 
 ## Next Recommended Actions
 
-1. Continue **Loop 6**: Audit `web.py` endpoints against `specification.md`; add any missing REST routes
+1. Continue **Loop 7**: Finish constant externalization; move hardcoded constants to env vars or config
 2. Or run `/dev-scope` for a new goal outside the plan
 3. Or run `/dev-status` to verify state recoverability
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` defines 10 loops. Loops 1-5 done.
+- `next-phase-plan.md` defines 10 loops. Loops 1-6 done.
 - `current-focus.md` remains the authority on project purpose.
 - Phase-exit success signal: test count >= 50. Current: 44. Need 6 more tests or defer to next phase.
 - No blockers. Workspace is clean. Ready for next loop.

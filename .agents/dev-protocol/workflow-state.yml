@@ -10,12 +10,12 @@ project:
 
 state:
   current_phase: unknown
-  current_focus: next_phase_plan_loops_1_5_complete
-  active_work: awaiting_loop_6_or_user_direction
+  current_focus: next_phase_plan_loop_6_complete
+  active_work: awaiting_loop_7_or_user_direction
   blockers: none_detected
   last_activity:
-    commit: "2632ca0"
-    message: "docs(defer): add deterministic replay consideration for revert_to_event"
+    commit: "a41b0b0"
+    message: "chore(protocol): save dev-protocol state after loop 5"
     date: "2026-05-27"
 
 version_tracking:
@@ -32,16 +32,16 @@ version_tracking:
     - clarify_rewrite_verify_loop_3
     - test_coverage_loop_4
     - undo_rollback_loop_5
+    - loop_6_api_audit
   in_progress: []
   pending:
-    - loop_6_api_audit
     - loop_7_constants
     - user_direction_for_dev_protocol_loops
 
 checkpoint:
-  last_commit: "2632ca00a1339600906bf1ac19a6ee79d954b957"
+  last_commit: "a41b0b01c96e773395ee49129ca404dc0873793f"
   last_updated: "2026-05-27"
-  summary: "Loop 5 complete. Implemented basic revert_to_event undo using event log. Added 4 tests. 44 tests passing. Loops 1-5 of next-phase plan done."
+  summary: "Loop 6 complete. Audited web.py REST endpoints against specification.md. All 25 spec-defined routes present, auth rules aligned, zero deviations. No source code modified. 44 tests passing. Loops 1-6 of next-phase plan done."
 
 git:
   branch: master
