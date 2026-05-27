@@ -9,7 +9,7 @@ Last updated by /dev-save on 2026-05-27.
 - **Phase**: unknown (onboarding completed, phase to be set by user or /dev-status)
 - **Branch**: master
 - **Workspace**: clean
-- **Protocol State**: v2 runtime active, seven workflow loops validated, next-phase plan Loops 1-4 complete
+- **Protocol State**: v2 runtime active, eight workflow loops validated, next-phase plan Loops 1-5 complete
 - **Current Focus**: see `current-focus.md` and `next-phase-plan.md`
 
 ## Completed Work
@@ -56,19 +56,30 @@ Last updated by /dev-save on 2026-05-27.
 - Test count: 37 → 40
 - All tests passing
 
+### Eighth Workflow Loop (Undo/Rollback — Loop 5 of Plan)
+- **Basic Undo Implemented**: `revert_to_event(session_id, event_id)` in `engine.py`
+  - Truncates events and data lists by `created_at`
+  - Resets phase/round/status to target event state
+  - Clears derived state (merged assumptions, refine submitted, devils advocate)
+  - Infers HUMAN_REVIEW/COMPLETED from remaining system events
+- **MCP Tool Registered**: `revert_to_event` exposed in `server.py`
+- **Tests**: 4 tests added (truncate, phase reset, derived state clear, invalid event)
+- Test count: 40 → 44
+- **Documented Limitation**: Added docstring noting this is not deterministic replay; full replay would require per-event snapshots or precise side-effect replay
+
 ## Current Focus
 
-Loops 1-4 of next-phase plan complete. Ready for Loop 5: implement basic undo/rollback (`revert_to_event`).
+Loops 1-5 of next-phase plan complete. Ready for Loop 6: API behavior audit (web.py endpoints vs specification alignment).
 
 ## Next Recommended Actions
 
-1. Continue **Loop 5**: Implement basic undo/rollback using existing event log
+1. Continue **Loop 6**: Audit `web.py` endpoints against `specification.md`; add any missing REST routes
 2. Or run `/dev-scope` for a new goal outside the plan
 3. Or run `/dev-status` to verify state recoverability
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` defines 10 loops. Loops 1-4 done.
+- `next-phase-plan.md` defines 10 loops. Loops 1-5 done.
 - `current-focus.md` remains the authority on project purpose.
-- Phase-exit success signal: test count >= 50. Current: 40. Need 10 more tests or defer to next phase.
+- Phase-exit success signal: test count >= 50. Current: 44. Need 6 more tests or defer to next phase.
 - No blockers. Workspace is clean. Ready for next loop.
