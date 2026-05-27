@@ -10,12 +10,12 @@ project:
 
 state:
   current_phase: unknown
-  current_focus: next_phase_plan_loop_6_complete
-  active_work: awaiting_loop_7_or_user_direction
+  current_focus: next_phase_plan_loop_7_complete
+  active_work: awaiting_loop_8_or_user_direction
   blockers: none_detected
   last_activity:
-    commit: "a41b0b0"
-    message: "chore(protocol): save dev-protocol state after loop 5"
+    commit: "da502bd"
+    message: "refactor(constants): extract runtime constants from engine and web layers"
     date: "2026-05-27"
 
 version_tracking:
@@ -33,15 +33,16 @@ version_tracking:
     - test_coverage_loop_4
     - undo_rollback_loop_5
     - loop_6_api_audit
+    - loop_7_constants
   in_progress: []
   pending:
-    - loop_7_constants
+    - loop_8_hierarchical_deltas
     - user_direction_for_dev_protocol_loops
 
 checkpoint:
-  last_commit: "a41b0b01c96e773395ee49129ca404dc0873793f"
+  last_commit: "da502bdd31c7edcc1b9a5c71d95d02b35de7a656"
   last_updated: "2026-05-27"
-  summary: "Loop 6 complete. Audited web.py REST endpoints against specification.md. All 25 spec-defined routes present, auth rules aligned, zero deviations. No source code modified. 44 tests passing. Loops 1-6 of next-phase plan done."
+  summary: "Loop 7 complete. Extracted runtime constants to constants.py: session defaults, consensus thresholds, assumption similarity, timeouts, challenge/vote defaults, delta actions, registration actions. Replaced hardcoded literals in engine.py/web.py/server.py. 44 tests passing. Loops 1-7 of next-phase plan done."
 
 git:
   branch: master

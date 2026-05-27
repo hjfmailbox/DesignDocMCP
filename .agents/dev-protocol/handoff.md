@@ -9,7 +9,7 @@ Last updated by /dev-save on 2026-05-27.
 - **Phase**: unknown (onboarding completed, phase to be set by user or /dev-status)
 - **Branch**: master
 - **Workspace**: clean
-- **Protocol State**: v2 runtime active, nine workflow loops validated, next-phase plan Loops 1-6 complete
+- **Protocol State**: v2 runtime active, ten workflow loops validated, next-phase plan Loops 1-7 complete
 - **Current Focus**: see `current-focus.md` and `next-phase-plan.md`
 
 ## Completed Work
@@ -75,19 +75,33 @@ Last updated by /dev-save on 2026-05-27.
 - **No source code modified**
 - 44 tests passing
 
+### Tenth Workflow Loop (Constant Extraction — Loop 7 of Plan)
+- **Constants File Created**: `src/designdoc_mcp/constants.py` with 20+ centralized constants
+  - Session defaults (DEFAULT_MIN_ROUNDS, DEFAULT_MAX_ROUNDS)
+  - Consensus thresholds (CONSENSUS_SEVERE_DISAGREEMENT_THRESHOLD, CONSENSUS_PARTIAL_AGREEMENT_MIN)
+  - Assumption/clarity thresholds (NOVELTY_THRESHOLD, ASSUMPTION_SIMILARITY_THRESHOLD)
+  - Timeouts (SSE_KEEPALIVE_SECONDS, TASK_POLL_TIMEOUT, WAIT_FOR_TASK_*)
+  - Challenge/vote defaults (DEFAULT_CONFIDENCE, DEFAULT_CHALLENGE_CATEGORY, DEFAULT_CHALLENGE_PRIORITY, DEFAULT_VOTE_TYPE)
+  - Requirement delta actions (ACTION_DELTA_*)
+  - Registration actions (ACTION_REGISTERED, ACTION_REJOINED)
+- **Three Files Updated**: engine.py, web.py, server.py — all hardcoded literals replaced with constant imports
+- **Enum Comparisons**: Replaced string-based status/phase comparisons with SessionStatus/DebatePhase enum comparisons where possible
+- **No behavior changes**
+- 44 tests passing
+
 ## Current Focus
 
-Loops 1-6 of next-phase plan complete. Ready for Loop 7: constant externalization (`AGENT_INACTIVE_TIMEOUT_SECONDS`, `CLARITY_THRESHOLD`, etc. from models.py to env vars).
+Loops 1-7 of next-phase plan complete. Ready for Loop 8: hierarchical requirement deltas (`add_requirement_delta` with `parent_delta_id`).
 
 ## Next Recommended Actions
 
-1. Continue **Loop 7**: Finish constant externalization; move hardcoded constants to env vars or config
+1. Continue **Loop 8**: Extend `add_requirement_delta` to support `parent_delta_id` for hierarchical requirements
 2. Or run `/dev-scope` for a new goal outside the plan
 3. Or run `/dev-status` to verify state recoverability
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` defines 10 loops. Loops 1-6 done.
+- `next-phase-plan.md` defines 10 loops. Loops 1-7 done.
 - `current-focus.md` remains the authority on project purpose.
 - Phase-exit success signal: test count >= 50. Current: 44. Need 6 more tests or defer to next phase.
 - No blockers. Workspace is clean. Ready for next loop.
