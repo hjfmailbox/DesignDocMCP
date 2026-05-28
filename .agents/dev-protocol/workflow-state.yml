@@ -10,13 +10,13 @@ project:
 
 state:
   current_phase: unknown
-  current_focus: next_phase_plan_loop_7_complete
-  active_work: awaiting_loop_8_or_user_direction
+  current_focus: loops_1_10_complete_awaiting_direction
+  active_work: awaiting_user_direction
   blockers: none_detected
   last_activity:
-    commit: "da502bd"
-    message: "refactor(constants): extract runtime constants from engine and web layers"
-    date: "2026-05-27"
+    commit: "b3f48fa5cb1d130ace25288e9214a20ad5fe5967"
+    message: "feat(v0.3): complete loops 8-10 from next phase plan"
+    date: "2026-05-28"
 
 version_tracking:
   completed_phases:
@@ -34,20 +34,24 @@ version_tracking:
     - undo_rollback_loop_5
     - loop_6_api_audit
     - loop_7_constants
+    - loop_8_hierarchical_deltas
+    - loop_9_e2e_tests
+    - loop_10_docs_sweep
+    - history_rewrite_remove_deferred_improvements
   in_progress: []
   pending:
-    - loop_8_hierarchical_deltas
-    - user_direction_for_dev_protocol_loops
+    - user_direction_for_next_phase
 
 checkpoint:
-  last_commit: "da502bdd31c7edcc1b9a5c71d95d02b35de7a656"
-  last_updated: "2026-05-27"
-  summary: "Loop 7 complete. Extracted runtime constants to constants.py: session defaults, consensus thresholds, assumption similarity, timeouts, challenge/vote defaults, delta actions, registration actions. Replaced hardcoded literals in engine.py/web.py/server.py. 44 tests passing. Loops 1-7 of next-phase plan done."
+  last_commit: "b3f48fa5cb1d130ace25288e9214a20ad5fe5967"
+  last_updated: "2026-05-28"
+  summary: "Loops 1-10 complete. 56 tests passing. History rewritten to remove deferred-improvements.txt from all commits; file retained locally as untracked. Phase stabilization complete. Awaiting user direction for scenario expansion or next goal."
 
 git:
   branch: master
   base_branch: master
-  untracked_files: []
+  untracked_files:
+    - deferred-improvements.txt
   unstaged_changes: 0
   staged_changes: 0
   modified_files: []
