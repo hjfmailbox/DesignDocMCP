@@ -1203,6 +1203,7 @@ def add_requirement_delta(
     delta_statement: str,
     constraints: list[str] | None = None,
     acceptance_criteria: list[str] | None = None,
+    parent_delta_id: str | None = None,
 ) -> dict[str, Any]:
     """Add a supplementary requirement (delta) to an existing session.
 
@@ -1225,6 +1226,7 @@ def add_requirement_delta(
         delta_statement: The supplementary requirement statement (can be fuzzy)
         constraints: Additional constraints for this delta
         acceptance_criteria: Additional acceptance criteria for this delta
+        parent_delta_id: Optional parent delta ID to form a hierarchical delta tree
 
     Returns:
         Updated requirement info with clarity assessment
@@ -1235,6 +1237,7 @@ def add_requirement_delta(
         delta_statement=delta_statement,
         constraints=constraints or [],
         acceptance_criteria=acceptance_criteria or [],
+        parent_delta_id=parent_delta_id,
     )
 
 

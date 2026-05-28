@@ -183,15 +183,18 @@ async def human_decision_api(session_id: str, request: Request, _auth=Depends(_v
     decision = body.get("decision", "")
     rationale = body.get("rationale", "")
     engine = _get_engine()
-    if action == "approve":
-        engine.human_approve(session_id, "human", comment=reason)
-    elif action == "reject":
-        engine.human_reject(session_id, "human", reason=reason)
-    elif action == "override":
-        engine.human_override(session_id, "human", decision=decision or action, rationale=rationale or reason)
-    else:
-        return {"error": f"Unknown action: {action}"}
-    return {"status": "ok"}
+    try:
+        if action == "approve":
+            engine.human_approve(session_id, "human", comment=reason)
+        elif action == "reject":
+            engine.human_reject(session_id, "human", reason=reason)
+        elif action == "override":
+            engine.human_override(session_id, "human", decision=decision or action, rationale=rationale or reason)
+        else:
+            return {"error": f"Unknown action: {action}"}
+        return {"status": "ok"}
+    except ValueError as e:
+        return {"error": str(e)}
 
 
 @web_app.post("/api/sessions/{session_id}/force-skip-clarification")

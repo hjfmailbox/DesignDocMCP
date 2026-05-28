@@ -369,6 +369,19 @@ class Requirement(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class RequirementDelta(BaseModel):
+    delta_id: str
+    session_id: str
+    parent_delta_id: str | None = None
+    problem_statement: str = ""
+    constraints: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    clarity_score: float = 0.0
+    clarity_dimensions: dict[str, bool] = Field(default_factory=dict)
+    skip_clarification: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class Session(BaseModel):
     session_id: str
     title: str
@@ -395,6 +408,7 @@ class Session(BaseModel):
     pending_questions: list[PendingQuestion] = Field(default_factory=list)
     decision_points: list[DecisionPoint] = Field(default_factory=list)
     novelty_scores: list[float] = Field(default_factory=list)
+    requirement_deltas: list[RequirementDelta] = Field(default_factory=list)
     devils_advocate_agent: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

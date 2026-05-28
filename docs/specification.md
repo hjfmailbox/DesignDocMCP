@@ -70,7 +70,7 @@
 | Session暂停/恢复 | ✅ 已完成 | — | 2026-05-20 |
 | 单Agent自审模式 | ✅ 已完成 | — | 2026-05-20 |
 | 按分歧点决策（DecisionPoint） | ✅ 已完成 | — | 2026-05-20 |
-| 操作回滚/撤销 | 📋 未开始 | — | — |
+| 操作回滚/撤销 | ✅ 已完成 | — | 2026-05-27 |
 
 图例：✅ 已完成 / ⏳ 进行中 / 📋 未开始
 
@@ -115,6 +115,7 @@ designdoc-mcp/
 │       ├── server.py                       # MCP服务器（FastMCP工具定义 + main入口）
 │       ├── store.py                        # 数据持久化（SessionStore）
 │       ├── clarity_config.py               # 清晰度评估配置（维度关键词 + 评分常量）
+│       ├── constants.py                    # 运行时常量集中定义（共识阈值、超时、默认值等）
 │       ├── sqlite_store.py                 # SQLite存储后端（StorageBackend + SQLiteBackend）
 │       ├── events.py                       # 事件总线（EventBus）
 │       ├── web.py                          # Web UI + REST API（FastAPI）
@@ -518,6 +519,18 @@ class Requirement(BaseModel):
     clarity_dimensions: dict[str, bool] = {}         # 各维度覆盖情况
     skip_clarification: bool = False                 # clarity_score >= 0.7时为True
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
+
+class RequirementDelta(BaseModel):
+    delta_id: str                                    # uuid4 hex[:8]
+    session_id: str
+    parent_delta_id: str | None = None               # 父增量ID，支持层级需求树
+    problem_statement: str = ""
+    constraints: list[str] = []
+    acceptance_criteria: list[str] = []
+    clarity_score: float = 0.0
+    clarity_dimensions: dict[str, bool] = {}
+    skip_clarification: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
 ```
 
 #### Session
@@ -549,6 +562,7 @@ class Session(BaseModel):
     pending_questions: list[PendingQuestion] = []
     decision_points: list[DecisionPoint] = []          # 按分歧点提交的决策
     novelty_scores: list[float] = []
+    requirement_deltas: list[RequirementDelta] = []    # 追加的需求增量（支持层级关系）
     devils_advocate_agent: str = ""                  # 被指定为魔鬼代言人的agent_id
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO 8601 UTC
@@ -1043,7 +1057,7 @@ def _get_engine() -> CollaborationEngine:  # 懒初始化，依赖_get_store()
 |------|------|
 | `submit_requirement` | `(session_id, problem_statement, constraints=None, acceptance_criteria=None, open_questions=None, tech_preferences=None, forbidden_items=None) → dict` |
 | `register_agent` | `(session_id="", name="", model="", provider="", agent_identity="", client_type="") → dict` |
-| `add_requirement_delta` | `(session_id, delta_statement, constraints=None, acceptance_criteria=None) → dict` |
+| `add_requirement_delta` | `(session_id, delta_statement, constraints=None, acceptance_criteria=None, parent_delta_id=None) → dict` |
 | `force_skip_clarification` | `(session_id) → dict` |
 
 > register_agent 的 session_id 为空时自动选择唯一活跃会话。agent_identity 为 stable identity，跨 reconnect 保持稳定。如果匹配已有 agent，自动 rejoin（不创建新 agent）。client_type 用于 runtime capability detection。

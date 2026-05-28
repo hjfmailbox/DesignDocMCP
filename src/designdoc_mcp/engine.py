@@ -68,6 +68,7 @@ from .models import (
     QuestionOption,
     RefinedRequirement,
     Requirement,
+    RequirementDelta,
     Revision,
     Session,
     SessionStatus,
@@ -370,10 +371,16 @@ class CollaborationEngine:
         delta_statement: str,
         constraints: list[str] | None = None,
         acceptance_criteria: list[str] | None = None,
+        parent_delta_id: str | None = None,
     ) -> dict[str, Any]:
         session = self._get(session_id)
         if session.requirement is None:
             raise ValueError("Base requirement must be submitted first")
+
+        if parent_delta_id is not None:
+            parent_exists = any(d.delta_id == parent_delta_id for d in session.requirement_deltas)
+            if not parent_exists:
+                raise ValueError(f"Parent delta '{parent_delta_id}' not found in session")
 
         delta_req = Requirement(
             requirement_id=uuid.uuid4().hex[:8],
@@ -384,6 +391,19 @@ class CollaborationEngine:
             original_statement=delta_statement,
         )
         self._evaluate_clarity(delta_req)
+
+        delta = RequirementDelta(
+            delta_id=uuid.uuid4().hex[:8],
+            session_id=session_id,
+            parent_delta_id=parent_delta_id,
+            problem_statement=delta_statement,
+            constraints=constraints or [],
+            acceptance_criteria=acceptance_criteria or [],
+            clarity_score=delta_req.clarity_score,
+            clarity_dimensions=delta_req.clarity_dimensions,
+            skip_clarification=delta_req.skip_clarification,
+        )
+        session.requirement_deltas.append(delta)
 
         combined_statement = session.requirement.problem_statement
         if delta_statement:
@@ -412,6 +432,7 @@ class CollaborationEngine:
 
         result: dict[str, Any] = {
             "session_id": session_id,
+            "delta_id": delta.delta_id,
             "delta_clarity_score": delta_req.clarity_score,
             "delta_clarity_dimensions": delta_req.clarity_dimensions,
             "delta_skip_clarification": delta_req.skip_clarification,

@@ -305,7 +305,7 @@ docker compose up -d
 | `DESIGNDOC_API_TOKEN` | 空 | API认证Token（空=不启用） |
 | `DESIGNDOC_STORAGE` | `json` | 存储后端类型 (json/sqlite) |
 | `DESIGNDOC_NO_WEB` | 空 | 设为`1`禁用Web UI |
-| `DESIGNDOC_LOG_DIR` | 空 | 日志文件目录（空=仅控制台输出） |
+| `DESIGNDOC_LOG_DIR` | 空 | 日志文件目录（空=默认写入项目根目录 `logs/`） |
 
 ## 技术栈
 

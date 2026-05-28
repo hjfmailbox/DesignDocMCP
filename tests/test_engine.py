@@ -870,3 +870,58 @@ class TestDebatePhaseCreated:
         assert session.status == SessionStatus.CREATED
 
 
+class TestRequirementDeltaHierarchy:
+    def test_requirement_delta_can_reference_parent(self, engine):
+        session = engine.create_session(title="Delta Hierarchy", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+
+        parent = engine.add_requirement_delta(sid, delta_statement="Add auth")
+        parent_id = parent["delta_id"]
+
+        child = engine.add_requirement_delta(sid, delta_statement="Add OAuth", parent_delta_id=parent_id)
+        assert child["delta_id"] is not None
+
+        session = engine._get(sid)
+        assert len(session.requirement_deltas) == 2
+        assert session.requirement_deltas[1].parent_delta_id == parent_id
+
+    def test_invalid_parent_delta_rejected(self, engine):
+        session = engine.create_session(title="Delta Invalid", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+
+        with pytest.raises(ValueError, match="Parent delta 'nonexistent' not found"):
+            engine.add_requirement_delta(sid, delta_statement="Add auth", parent_delta_id="nonexistent")
+
+    def test_backward_compatibility_without_parent(self, engine):
+        session = engine.create_session(title="Delta Backcompat", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+
+        result = engine.add_requirement_delta(sid, delta_statement="Add auth")
+        assert "delta_id" in result
+        assert "delta_clarity_score" in result
+        assert "combined_clarity_score" in result
+        assert "action" in result
+
+        session = engine._get(sid)
+        assert len(session.requirement_deltas) == 1
+        assert session.requirement_deltas[0].parent_delta_id is None
+
+    def test_parent_chain_same_session_only(self, engine):
+        session_a = engine.create_session(title="Session A", description="Test")
+        session_b = engine.create_session(title="Session B", description="Test")
+        sid_a = session_a.session_id
+        sid_b = session_b.session_id
+
+        engine.submit_requirement(sid_a, problem_statement="Build system A")
+        engine.submit_requirement(sid_b, problem_statement="Build system B")
+
+        parent = engine.add_requirement_delta(sid_a, delta_statement="Add auth")
+        parent_id = parent["delta_id"]
+
+        with pytest.raises(ValueError, match=f"Parent delta '{parent_id}' not found"):
+            engine.add_requirement_delta(sid_b, delta_statement="Add auth", parent_delta_id=parent_id)
+
+
