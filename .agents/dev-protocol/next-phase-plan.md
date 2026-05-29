@@ -19,4 +19,4 @@
 - Files: `src/designdoc_mcp/engine.py`, `src/designdoc_mcp/models.py`, `tests/test_engine.py`
 - Goal: Support multiple human reviewers with vote aggregation (agree/disagree/abstain)
 - Validation: `test_multi_human_votes` passes; multiple votes aggregated correctly
-- Status: pending
+- Status: completed

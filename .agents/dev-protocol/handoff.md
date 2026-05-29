@@ -6,11 +6,11 @@ Last updated by /dev-save on 2026-05-29.
 ## Session Context
 
 - **Project**: DesignDoc MCP (designdoc-mcp v0.3.0)
-- **Phase**: scenario_expansion (external validation)
+- **Phase**: scenario_expansion (external validation complete)
 - **Branch**: master
 - **Workspace**: clean (1 untracked file: deferred-improvements.txt)
-- **Protocol State**: v2 runtime active, external validation in progress
-- **Current Focus**: Loop 2 complete (HTML export). Loop 3 pending (multi-human review).
+- **Protocol State**: v2 runtime active, external validation complete
+- **Current Focus**: All 3 validation loops complete. Produce validation report.
 
 ## Completed Work
 
@@ -26,13 +26,21 @@ Last updated by /dev-save on 2026-05-29.
 - Added `TestHtmlExport` with 3 tests
 - 62 tests passing
 
+### External Validation Loop 3: Multi-human review
+- Added `HumanVote` model to `models.py`
+- Added `submit_human_vote` method to `engine.py` with majority aggregation
+- Added `@mcp.tool()` `submit_human_vote` in `server.py`
+- Added `TestMultiHumanReview` with 4 tests
+- 66 tests passing
+
 ## Next Recommended Actions
 
-1. Continue **Loop 3**: Multi-human review voting foundation
-2. Run `/dev-save` after loop 3
+1. Produce `docs/external-validation-designdocmcp.md`
+2. Commit validation report
+3. Return to dev-protocol repository
 
 ## Notes For Next Session
 
-- next-phase-plan.md has Loop 3 pending
-- compare_sessions addresses 场景C from issues.md
-- HTML export addresses P3-3 from issues.md
+- All 3 planned loops completed successfully
+- No protocol failures encountered during validation
+- Minor friction observed (documented in validation report)

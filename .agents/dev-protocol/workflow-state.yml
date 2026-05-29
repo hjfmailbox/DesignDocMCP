@@ -10,12 +10,12 @@ project:
 
 state:
   current_phase: scenario_expansion
-  current_focus: external_validation_loop_2_html_export
-  active_work: implementing_html_export_support
+  current_focus: external_validation_complete
+  active_work: v1_0_external_validation_report
   blockers: none_detected
   last_activity:
-    commit: "77e0859"
-    message: "feat(export): add HTML design document generation"
+    commit: "b94e386"
+    message: "feat(review): add multi-human review voting foundation"
     date: "2026-05-29"
 
 version_tracking:
@@ -40,14 +40,15 @@ version_tracking:
     - history_rewrite_remove_deferred_improvements
     - external_validation_loop_1_compare_sessions
     - external_validation_loop_2_html_export
+    - external_validation_loop_3_multi_human_review
   in_progress: []
   pending:
-    - external_validation_loop_3_multi_human_review
+    - v1_0_validation_report
 
 checkpoint:
-  last_commit: "77e0859"
+  last_commit: "b94e386"
   last_updated: "2026-05-29"
-  summary: "Loop 2 complete: HTML export support added. 62 tests passing (3 new). Addresses P3-3 from issues.md."
+  summary: "Loop 3 complete: multi-human review voting foundation added. 66 tests passing (4 new). All 3 external validation loops completed. Addresses 场景C, P3-3, and 场景E from issues.md."
 
 git:
   branch: master
