@@ -154,6 +154,54 @@ def generate_full_output(session: Session) -> dict[str, str]:
     }
 
 
+def generate_design_document_html(session: Session) -> str:
+    """Generate a basic HTML design document from the session."""
+    md = generate_design_document(session)
+    lines = [
+        "<!DOCTYPE html>",
+        '<html lang="en">',
+        "<head>",
+        '  <meta charset="UTF-8">',
+        f"  <title>{session.title}</title>",
+        "  <style>",
+        "    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }",
+        "    h1, h2, h3 { color: #333; }",
+        "    table { border-collapse: collapse; width: 100%; }",
+        "    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
+        "    th { background: #f5f5f5; }",
+        "    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }",
+        "    blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }",
+        "  </style>",
+        "</head>",
+        "<body>",
+    ]
+    # Convert markdown headers to HTML
+    for raw in md.splitlines():
+        line = raw
+        # Headers
+        if line.startswith("# "):
+            line = f"<h1>{line[2:]}</h1>"
+        elif line.startswith("## "):
+            line = f"<h2>{line[3:]}</h2>"
+        elif line.startswith("### "):
+            line = f"<h3>{line[4:]}</h3>"
+        elif line.startswith("> "):
+            line = f"<blockquote>{line[2:]}</blockquote>"
+        elif line.startswith("- "):
+            line = f"<li>{line[2:]}</li>"
+        elif line.startswith("| ") and line.endswith(" |"):
+            # Table rows handled below
+            pass
+        elif line == "":
+            line = "<br>"
+        else:
+            line = f"<p>{line}</p>"
+        lines.append(line)
+    lines.append("</body>")
+    lines.append("</html>")
+    return "\n".join(lines)
+
+
 def _add_header(lines: list[str], session: Session) -> None:
     lines.append(f"# {session.title}")
     lines.append(f"")

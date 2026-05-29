@@ -970,3 +970,42 @@ class TestCompareSessions:
         session = engine.create_session(title="Session", description="Test")
         with pytest.raises(ValueError, match="Session 'nonexistent' not found"):
             engine.compare_sessions(session.session_id, "nonexistent")
+
+
+class TestHtmlExport:
+    def test_html_export_contains_title(self, engine):
+        session = engine.create_session(title="HTML Test Session", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a web app")
+
+        from designdoc_mcp.document import generate_design_document_html
+        html = generate_design_document_html(engine._get(sid))
+
+        assert "<!DOCTYPE html>" in html
+        assert "HTML Test Session" in html
+        assert "<title>HTML Test Session</title>" in html
+
+    def test_html_export_contains_requirement(self, engine):
+        session = engine.create_session(title="HTML Req Session", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a fast API")
+
+        from designdoc_mcp.document import generate_design_document_html
+        html = generate_design_document_html(engine._get(sid))
+
+        assert "Build a fast API" in html
+
+    def test_html_export_structure(self, engine):
+        session = engine.create_session(title="HTML Struct Session", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.register_agent(session_id=sid, name="Agent1")
+
+        from designdoc_mcp.document import generate_design_document_html
+        html = generate_design_document_html(engine._get(sid))
+
+        assert '<html lang="en">' in html
+        assert "</head>" in html
+        assert "<body>" in html
+        assert "</body>" in html
+        assert "</html>" in html

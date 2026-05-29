@@ -1281,6 +1281,30 @@ def generate_design_document(session_id: str) -> str:
     return _generate_design_document(session)
 
 
+@mcp.tool()
+def generate_design_document_html(session_id: str) -> str:
+    """Generate an HTML design document from the completed debate.
+
+    Call this after the session is completed (consensus reached or human approved).
+    Returns a basic HTML page with the design document content.
+
+    Args:
+        session_id: The session identifier
+
+    Returns:
+        The generated HTML design document content
+    """
+    from .document import generate_design_document_html as _generate_design_document_html
+
+    store = _get_store()
+    session = store.get_session(session_id)
+    if session is None:
+        return f"Session '{session_id}' not found."
+    if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
+        return f"Session is in '{session.status.value}' status. Please complete the debate before generating the design document."
+    return _generate_design_document_html(session)
+
+
 @mcp.resource("designdoc://sessions")
 def list_sessions_resource() -> str:
     """List all sessions as a resource."""
