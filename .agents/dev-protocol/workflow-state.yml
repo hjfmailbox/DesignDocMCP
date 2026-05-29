@@ -9,14 +9,14 @@ project:
   framework: FastMCP + FastAPI
 
 state:
-  current_phase: unknown
-  current_focus: loops_1_10_complete_awaiting_direction
-  active_work: awaiting_user_direction
+  current_phase: scenario_expansion
+  current_focus: external_validation_loop_1_compare_sessions
+  active_work: implementing_compare_sessions_mcp_tool
   blockers: none_detected
   last_activity:
-    commit: "b3f48fa5cb1d130ace25288e9214a20ad5fe5967"
-    message: "feat(v0.3): complete loops 8-10 from next phase plan"
-    date: "2026-05-28"
+    commit: "8e67741"
+    message: "feat(tools): add compare_sessions MCP tool for cross-session comparison"
+    date: "2026-05-29"
 
 version_tracking:
   completed_phases:
@@ -38,14 +38,16 @@ version_tracking:
     - loop_9_e2e_tests
     - loop_10_docs_sweep
     - history_rewrite_remove_deferred_improvements
+    - external_validation_loop_1_compare_sessions
   in_progress: []
   pending:
-    - user_direction_for_next_phase
+    - external_validation_loop_2_html_export
+    - external_validation_loop_3_multi_human_review
 
 checkpoint:
-  last_commit: "b3f48fa5cb1d130ace25288e9214a20ad5fe5967"
-  last_updated: "2026-05-28"
-  summary: "Loops 1-10 complete. 56 tests passing. History rewritten to remove deferred-improvements.txt from all commits; file retained locally as untracked. Phase stabilization complete. Awaiting user direction for scenario expansion or next goal."
+  last_commit: "8e67741"
+  last_updated: "2026-05-29"
+  summary: "Loop 1 complete: compare_sessions MCP tool implemented. 59 tests passing (3 new). Cross-session comparison feature addresses 场景C from issues.md."
 
 git:
   branch: master
