@@ -56,6 +56,7 @@ from .models import (
     DevilsAdvocate,
     Event,
     EventType,
+    HumanVote,
     MergedAssumptionGroup,
     MAX_CLARIFY_ROUNDS,
     Optimization,
@@ -1241,6 +1242,34 @@ class CollaborationEngine:
         session.completed_at = datetime.now(timezone.utc).isoformat()
         self._add_event(session, EventType.HUMAN_DECISION, approver, content=f"Override decision: {decision}. Rationale: {rationale}")
         self.store.update_session(session)
+
+    def submit_human_vote(self, session_id: str, approver: str, vote_type: str, comment: str = "") -> dict[str, Any]:
+        session = self._get(session_id)
+        if session.status != SessionStatus.HUMAN_REVIEW:
+            raise ValueError("Session is not in human review state")
+        vote = HumanVote(
+            vote_id=uuid.uuid4().hex[:8],
+            session_id=session_id,
+            approver=approver,
+            vote_type=VoteType(vote_type),
+            comment=comment,
+        )
+        session.human_votes.append(vote)
+        self._add_event(session, EventType.HUMAN_DECISION, approver, content=f"Human vote: {vote_type}. {comment}")
+        # Aggregate votes: if majority (>>1/2) agree, complete session
+        agree_count = sum(1 for v in session.human_votes if v.vote_type == VoteType.AGREE)
+        total = len(session.human_votes)
+        if total >= 2 and agree_count > total / 2:
+            session.status = SessionStatus.COMPLETED
+            session.completed_at = datetime.now(timezone.utc).isoformat()
+            self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Human review completed by majority vote ({agree_count}/{total})")
+        self.store.update_session(session)
+        return {
+            "vote_id": vote.vote_id,
+            "total_votes": total,
+            "agree_count": agree_count,
+            "session_status": session.status.value,
+        }
 
     def archive_session(self, session_id: str) -> dict:
         session = self._get(session_id)

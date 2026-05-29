@@ -1009,3 +1009,47 @@ class TestHtmlExport:
         assert "<body>" in html
         assert "</body>" in html
         assert "</html>" in html
+
+
+class TestMultiHumanReview:
+    def _setup_human_review_session(self, engine):
+        session = engine.create_session(title="Multi-Human Review", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.register_agent(session_id=sid, name="Agent1")
+        engine.register_agent(session_id=sid, name="Agent2")
+        session = engine._get(sid)
+        session.status = SessionStatus.HUMAN_REVIEW
+        engine.store.update_session(session)
+        return sid
+
+    def test_submit_human_vote_basic(self, engine):
+        sid = self._setup_human_review_session(engine)
+        result = engine.submit_human_vote(sid, "Reviewer1", "agree", "Looks good")
+        assert result["total_votes"] == 1
+        assert result["agree_count"] == 1
+        assert result["session_status"] == "human_review"
+
+    def test_majority_vote_completes_session(self, engine):
+        sid = self._setup_human_review_session(engine)
+        engine.submit_human_vote(sid, "Reviewer1", "agree")
+        result = engine.submit_human_vote(sid, "Reviewer2", "agree")
+        assert result["total_votes"] == 2
+        assert result["agree_count"] == 2
+        assert result["session_status"] == "completed"
+        session = engine._get(sid)
+        assert session.status == SessionStatus.COMPLETED
+
+    def test_non_majority_keeps_human_review(self, engine):
+        sid = self._setup_human_review_session(engine)
+        engine.submit_human_vote(sid, "Reviewer1", "agree")
+        result = engine.submit_human_vote(sid, "Reviewer2", "disagree")
+        assert result["total_votes"] == 2
+        assert result["agree_count"] == 1
+        assert result["session_status"] == "human_review"
+
+    def test_human_vote_wrong_state(self, engine):
+        session = engine.create_session(title="Wrong State", description="Test")
+        sid = session.session_id
+        with pytest.raises(ValueError, match="Session is not in human review state"):
+            engine.submit_human_vote(sid, "Reviewer1", "agree")

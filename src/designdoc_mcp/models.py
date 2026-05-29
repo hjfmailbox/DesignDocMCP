@@ -382,6 +382,15 @@ class RequirementDelta(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class HumanVote(BaseModel):
+    vote_id: str
+    session_id: str
+    approver: str
+    vote_type: VoteType
+    comment: str = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class Session(BaseModel):
     session_id: str
     title: str
@@ -405,6 +414,7 @@ class Session(BaseModel):
     optimizations: list[Optimization] = Field(default_factory=list)
     devils_advocates: list[DevilsAdvocate] = Field(default_factory=list)
     consensus_votes: list[ConsensusVote] = Field(default_factory=list)
+    human_votes: list[HumanVote] = Field(default_factory=list)
     pending_questions: list[PendingQuestion] = Field(default_factory=list)
     decision_points: list[DecisionPoint] = Field(default_factory=list)
     novelty_scores: list[float] = Field(default_factory=list)

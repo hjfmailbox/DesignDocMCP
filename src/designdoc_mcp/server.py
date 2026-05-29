@@ -1065,6 +1065,25 @@ def human_override(session_id: str, approver: str, decision: str, rationale: str
 
 
 @mcp.tool()
+def submit_human_vote(session_id: str, approver: str, vote_type: str, comment: str = "") -> dict[str, Any]:
+    """Submit a human review vote during the HUMAN_REVIEW phase.
+
+    Supports multiple human reviewers. When majority (>1/2) agree, session auto-completes.
+
+    Args:
+        session_id: The session identifier
+        approver: Name/identifier of the human reviewer
+        vote_type: agree, disagree, abstain, or needs_clarification
+        comment: Optional comment
+
+    Returns:
+        Vote confirmation with total votes, agree count, and session status
+    """
+    engine = _get_engine()
+    return engine.submit_human_vote(session_id, approver, vote_type, comment)
+
+
+@mcp.tool()
 def archive_session(session_id: str) -> dict[str, Any]:
     """Archive a completed session. Working data (requirements, docs, history) is cleaned up
     and moved to the archive directory. The session record is preserved.
