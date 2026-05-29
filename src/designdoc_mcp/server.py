@@ -132,6 +132,24 @@ def get_session_flow(session_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def compare_sessions(session_id_a: str, session_id_b: str) -> dict[str, Any]:
+    """Compare two sessions and return a structured diff.
+
+    Compares requirements, agent counts, phases, statuses, and key decisions.
+
+    Args:
+        session_id_a: The first session identifier
+        session_id_b: The second session identifier
+
+    Returns:
+        Structured comparison including requirements_match, agent_count, round_count,
+        decisions count, same_phase, and same_status
+    """
+    engine = _get_engine()
+    return engine.compare_sessions(session_id_a, session_id_b)
+
+
+@mcp.tool()
 def submit_requirement(
     session_id: str,
     problem_statement: str,

@@ -925,3 +925,48 @@ class TestRequirementDeltaHierarchy:
             engine.add_requirement_delta(sid_b, delta_statement="Add auth", parent_delta_id=parent_id)
 
 
+
+
+class TestCompareSessions:
+    def test_compare_sessions_basic(self, engine):
+        session_a = engine.create_session(title="Session A", description="Test A")
+        session_b = engine.create_session(title="Session B", description="Test B")
+        sid_a = session_a.session_id
+        sid_b = session_b.session_id
+
+        engine.submit_requirement(sid_a, problem_statement="Build system A")
+        engine.submit_requirement(sid_b, problem_statement="Build system B")
+
+        engine.register_agent(session_id=sid_a, name="AgentA1")
+        engine.register_agent(session_id=sid_a, name="AgentA2")
+        engine.register_agent(session_id=sid_b, name="AgentB1")
+
+        result = engine.compare_sessions(sid_a, sid_b)
+
+        assert result["requirements_match"] is False
+        assert result["agent_count"]["a"] == 2
+        assert result["agent_count"]["b"] == 1
+        assert result["same_phase"] is True
+        assert result["same_status"] is True
+        assert result["session_a"]["title"] == "Session A"
+        assert result["session_b"]["title"] == "Session B"
+
+    def test_compare_sessions_same_requirement(self, engine):
+        session_a = engine.create_session(title="Session A", description="Test")
+        session_b = engine.create_session(title="Session B", description="Test")
+        sid_a = session_a.session_id
+        sid_b = session_b.session_id
+
+        engine.submit_requirement(sid_a, problem_statement="Build identical system")
+        engine.submit_requirement(sid_b, problem_statement="Build identical system")
+
+        result = engine.compare_sessions(sid_a, sid_b)
+
+        assert result["requirements_match"] is True
+        assert result["same_phase"] is True
+        assert result["same_status"] is True
+
+    def test_compare_sessions_not_found(self, engine):
+        session = engine.create_session(title="Session", description="Test")
+        with pytest.raises(ValueError, match="Session 'nonexistent' not found"):
+            engine.compare_sessions(session.session_id, "nonexistent")

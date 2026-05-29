@@ -2031,6 +2031,28 @@ class CollaborationEngine:
         next_task = self.store.wait_for_task(agent_id, timeout=TASK_POLL_TIMEOUT)
         return next_task or {"status": "no_task"}
 
+    def compare_sessions(self, session_id_a: str, session_id_b: str) -> dict[str, Any]:
+        """Compare two sessions and return a structured diff.
+
+        Compares requirements, agent counts, phases, statuses, and key metrics.
+        """
+        session_a = self._get(session_id_a)
+        session_b = self._get(session_id_b)
+
+        req_a = session_a.requirement.problem_statement if session_a.requirement else ""
+        req_b = session_b.requirement.problem_statement if session_b.requirement else ""
+
+        return {
+            "session_a": {"title": session_a.title, "status": session_a.status.value, "phase": session_a.current_phase.value},
+            "session_b": {"title": session_b.title, "status": session_b.status.value, "phase": session_b.current_phase.value},
+            "requirements_match": req_a == req_b,
+            "agent_count": {"a": len(session_a.agents), "b": len(session_b.agents)},
+            "round_count": {"a": session_a.current_round, "b": session_b.current_round},
+            "proposal_count": {"a": len(session_a.proposals), "b": len(session_b.proposals)},
+            "same_phase": session_a.current_phase == session_b.current_phase,
+            "same_status": session_a.status == session_b.status,
+        }
+
     def _get(self, session_id: str) -> Session:
         session = self.store.get_session(session_id)
         if session is None:
