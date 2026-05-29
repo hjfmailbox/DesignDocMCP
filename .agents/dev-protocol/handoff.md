@@ -10,23 +10,29 @@ Last updated by /dev-save on 2026-05-29.
 - **Branch**: master
 - **Workspace**: clean (1 untracked file: deferred-improvements.txt)
 - **Protocol State**: v2 runtime active, external validation in progress
-- **Current Focus**: Loop 1 complete (compare_sessions). Loop 2 pending (HTML export).
+- **Current Focus**: Loop 2 complete (HTML export). Loop 3 pending (multi-human review).
 
 ## Completed Work
 
 ### External Validation Loop 1: compare_sessions
 - Added `compare_sessions` method to `CollaborationEngine`
 - Added `@mcp.tool()` `compare_sessions` in `server.py`
-- Added `TestCompareSessions` with 3 tests (basic, same requirement, not found)
-- All 59 tests passing (56 baseline + 3 new)
+- Added `TestCompareSessions` with 3 tests
+- 59 tests passing
+
+### External Validation Loop 2: HTML export
+- Added `generate_design_document_html` to `document.py`
+- Added `@mcp.tool()` `generate_design_document_html` in `server.py`
+- Added `TestHtmlExport` with 3 tests
+- 62 tests passing
 
 ## Next Recommended Actions
 
-1. Continue **Loop 2**: HTML export support (next-phase-plan.md)
-2. Continue **Loop 3**: Multi-human review voting foundation
-3. Run `/dev-save` after each loop
+1. Continue **Loop 3**: Multi-human review voting foundation
+2. Run `/dev-save` after loop 3
 
 ## Notes For Next Session
 
-- next-phase-plan.md has 3 loops defined for external validation
-- compare_sessions addresses 场景C (cross-session comparison) from issues.md
+- next-phase-plan.md has Loop 3 pending
+- compare_sessions addresses 场景C from issues.md
+- HTML export addresses P3-3 from issues.md

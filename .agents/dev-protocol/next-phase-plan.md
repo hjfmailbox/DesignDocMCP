@@ -12,7 +12,7 @@
 - Files: `src/designdoc_mcp/document.py`, `src/designdoc_mcp/server.py`, `tests/test_engine.py`
 - Goal: Generate HTML format design documents alongside Markdown
 - Validation: `test_html_export` passes; HTML output contains session title and architecture
-- Status: pending
+- Status: completed
 
 ## Loop 3 — Add multi-human review voting foundation
 
