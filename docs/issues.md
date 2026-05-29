@@ -189,11 +189,11 @@
 
 `pause_session` / `resume_session` MCP 工具已实现。暂停时冻结超时计时器，恢复后继续运行。
 
-### P3-3: 导出格式多样化
+### P3-3: 导出格式多样化（部分实现）
 
-只支持 Markdown 输出，缺少 PDF、HTML、DOCX 等格式。
+Markdown 输出已支持。HTML 导出已通过 `generate_design_document_html` 实现。PDF、DOCX 等格式仍待规划。
 
-**方案**: 集成 `pandoc` 或 `weasyprint` 支持多格式导出
+**方案**: 集成 `pandoc` 或 `weasyprint` 支持 PDF/DOCX 导出
 
 ### P3-4: Session 删除 ✅
 
@@ -215,21 +215,17 @@
 
 `add_requirement_delta` 已支持 `parent_delta_id`，可形成树状需求增量结构。子需求仍合并到主需求中参与当前阶段辩论。
 
-### 场景 C: 方案对比
+### 场景 C: 方案对比 ✅
 
-多个Session讨论同一需求的不同方案，需要跨Session对比。
-
-**方案**: 新增 `compare_sessions` 工具，生成对比文档
+`compare_sessions` MCP 工具已实现。支持跨 Session 对比需求、Agent 和决策的结构化差异，生成对比文档。
 
 ### 场景 D: 离线Agent ✅
 
 已有 rejoin 机制支持。Agent 提供 `agent_identity` 时可自动恢复连接，同步错过的状态。
 
-### 场景 E: 多人审核
+### 场景 E: 多人审核 ✅
 
-当前人类审核是单人操作。实际可能需要多人投票审核。
-
-**方案**: 人类审核也采用投票机制，支持多审核者
+`submit_human_vote` MCP 工具已实现。支持多审核者投票（agree/disagree/abstain），系统按多数原则聚合结果。
 
 ---
 
@@ -267,9 +263,9 @@
 | 单Agent自审模式 | P3 | 中 | ✅ 已实现 |
 | 离线Agent增量同步 | P3 | 中 | ✅ 已有rejoin机制 |
 | Session 暂停/恢复 | P3 | 中 | ✅ 已实现 |
-| 多格式导出 | P3 | 高 | 📋 待规划 |
-| 跨Session对比 | P3 | 高 | 📋 待规划 |
-| 多人审核 | P3 | 高 | 📋 待规划 |
+| 多格式导出 | P3 | 高 | 部分实现（HTML ✅，PDF/DOCX 📋） |
+| 跨Session对比 | P3 | 高 | ✅ 已实现 |
+| 多人审核 | P3 | 高 | ✅ 已实现 |
 | 操作回滚 | P3 | 高 | ✅ 已实现 |
 
 ### v2.0 — 按分歧点决策（详见 [decision-points.md](decision-points.md)）

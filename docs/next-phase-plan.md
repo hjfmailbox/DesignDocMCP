@@ -2,7 +2,7 @@
 
 ## Current Reality Snapshot
 
-**Project**: DesignDoc MCP v0.3.0 | **Branch**: master | **Tests**: 56 passed
+**Project**: DesignDoc MCP v0.3.0 | **Branch**: master | **Tests**: 66 passed
 
 **What works**:
 - Full 4-phase clarification + 6-phase debate flow
@@ -17,6 +17,9 @@
 - Hierarchical requirement deltas (`parent_delta_id`)
 - Runtime constants externalization (`constants.py`)
 - E2E API test skeleton (`test_api_e2e.py`)
+- Cross-session comparison (`compare_sessions`)
+- HTML design document export (`generate_design_document_html`)
+- Multi-human review voting (`submit_human_vote`)
 
 **What drifts**:
 - `docs/specification.md` task statuses aligned with code reality (Loop 1, 10)
@@ -24,9 +27,7 @@
 - Documentation drift eliminated; no "documentation lying" remains
 
 **What is genuinely missing**:
-- Multi-human review voting (scenario E)
-- Cross-session comparison (scenario C)
-- Multi-format export (PDF/HTML/DOCX)
+- PDF/DOCX export (HTML already implemented via `generate_design_document_html`)
 - Full deterministic replay (current undo is truncation-based, not snapshot-based)
 
 ---
@@ -45,15 +46,12 @@
 
 ## Recommended Focus
 
-Stabilize the **usable product surface** before expanding into new scenarios.
+Documentation drift resolved. Core stabilization (Loops 1-10) and external validation (Loops 11-13) complete. 66 tests passing.
 
-Priority order:
-1. Fix documentation drift so the team trusts the plan
-2. Verify and fix any hidden bugs in the clarification auto-advance logic
-3. Add undo/rollback (the biggest usability gap)
-4. Increase test coverage on consensus and phase-transition paths
-5. Complete constant externalization
-6. Add hierarchical requirement deltas (small scope, high user value)
+Next possible directions:
+1. **v2.0 按分歧点决策** — DecisionPoint 数据模型 + Critic 阶段扩展 + 前端决策卡片
+2. **PDF/DOCX 导出** — 基于已有 HTML 导出扩展多格式支持
+3. **Full deterministic replay** — 将截断式 undo 升级为基于快照的精确回播
 
 ---
 
@@ -77,10 +75,8 @@ Priority order:
 ## What NOT to Work On
 
 - **No SQLite backend perfection** — it works; full transaction/migration polish is over-engineering for current stage
-- **No multi-format export** — PDF/HTML/DOCX is speculative; Markdown is sufficient
+- **No PDF/DOCX export** — HTML is already implemented; PDF/DOCX is speculative
 - **No frontend redesign** — Web UI is functional; visual polish is low ROI
-- **No cross-session comparison** — high complexity, low immediate user signal
-- **No multi-human review voting** — depends on undo/rollback first; defer until event-reversion is solid
 - **No large refactor** — engine.py is large but stable; resist temptation
 
 ---
@@ -96,4 +92,4 @@ This phase ends when **all of the following** are true:
 5. ✅ No documented P1/P2 issues remain unaddressed
 6. ✅ Test count ≥ 50 (current 56, up from 37)
 
-**Phase complete.** Next: enter **scenario expansion phase** (multi-human review voting, cross-session comparison, multi-format export) or user-directed work.
+**Phase complete.** Stabilization (Loops 1-10) and external validation (Loops 11-13) finished. Next: choose between v2.0 decision-point features, PDF/DOCX export, or user-directed work.

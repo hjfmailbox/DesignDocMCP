@@ -71,6 +71,9 @@
 | 单Agent自审模式 | ✅ 已完成 | — | 2026-05-20 |
 | 按分歧点决策（DecisionPoint） | ✅ 已完成 | — | 2026-05-20 |
 | 操作回滚/撤销 | ✅ 已完成 | — | 2026-05-27 |
+| compare_sessions 跨 Session 对比 | ✅ 已完成 | — | 2026-05-29 |
+| generate_design_document_html HTML 导出 | ✅ 已完成 | — | 2026-05-29 |
+| submit_human_vote 多人审核投票 | ✅ 已完成 | — | 2026-05-29 |
 
 图例：✅ 已完成 / ⏳ 进行中 / 📋 未开始
 
