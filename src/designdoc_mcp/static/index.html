@@ -1007,24 +1007,22 @@ function app(){
       ]};
       this.showModal=true;
     },
-    adoptMajority(){
-      const unresolved=this.s.decision_points.filter(d=>!d.human_choice);
-      for(const dp of unresolved){
-        if(dp.options.length===0) continue;
-        // Count votes per option label across all options
-        const labelCounts={};
-        for(const o of dp.options){
-          labelCounts[o.label]=(labelCounts[o.label]||0)+1;
+    async adoptMajority(){
+      try{
+        const resp=await fetch('/api/sessions/'+this.sid+'/bulk-resolve-decisions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({strategy:'majority',preview:false})
+        });
+        const data=await resp.json();
+        await this.loadDetail(this.sid);
+        const count=(data.resolved||[]).length;
+        if(count>0){
+          this.showNotif('info','Bulk Resolve','已解决 '+count+' 个决策点');
+        }else{
+          this.showNotif('info','Bulk Resolve','没有需要解决的决策点');
         }
-        // Pick the option with most votes
-        let best=dp.options[0];
-        let bestCount=0;
-        for(const o of dp.options){
-          const c=labelCounts[o.label]||0;
-          if(c>bestCount){bestCount=c;best=o;}
-        }
-        this.apiCall('/resolve-decision-point',{decision_id:dp.decision_id,choice:best.option_id});
-      }
+      }catch(e){console.error(e)}
     },
     checkConstraintConflict(dp, constraint){
       if(!dp.human_choice) return false;
