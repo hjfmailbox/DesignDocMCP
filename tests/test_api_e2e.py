@@ -479,3 +479,44 @@ class TestDebatePhaseTransitions:
         resp = api_client.post(f"/api/sessions/{sid}/start-clarification")
         assert resp.status_code == 400
         assert "detail" in resp.json()
+
+
+class TestSessionEventTimeline:
+    def test_new_session_has_empty_event_timeline(self, api_client):
+        """新 session 的 event_timeline 为空列表"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Timeline Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "event_timeline" in data
+        assert data["event_timeline"] == []
+
+    def test_session_detail_includes_event_timeline(self, api_client):
+        """session detail 响应包含 event_timeline 数组，记录 phase 转换"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Timeline Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.post(
+            f"/api/sessions/{sid}/submit-requirement",
+            json={"problem_statement": "Build a system"},
+        )
+        assert resp.status_code == 200
+
+        resp = api_client.post("/api/register-agent", json={"session_id": sid, "name": "Alpha"})
+        assert resp.status_code == 200
+
+        resp = api_client.post(f"/api/sessions/{sid}/start-clarification")
+        assert resp.status_code == 200
+
+        resp = api_client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "event_timeline" in data
+        timeline = data["event_timeline"]
+        assert len(timeline) >= 1
+        # First transition should be from created to clarify_identify
+        assert timeline[0]["from_phase"] == "created"
+        assert timeline[0]["to_phase"] == "clarify_identify"
+        assert "timestamp" in timeline[0]

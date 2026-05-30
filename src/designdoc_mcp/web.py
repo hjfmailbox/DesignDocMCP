@@ -601,6 +601,18 @@ def _serialize_session(session: Any) -> dict[str, Any]:
         needs_human = True
         human_actions.append("resolve_questions")
 
+    event_timeline = []
+    prev_phase = DebatePhase.CREATED.value
+    for e in session.events:
+        curr_phase = e.phase.value
+        if curr_phase != prev_phase:
+            event_timeline.append({
+                "from_phase": prev_phase,
+                "to_phase": curr_phase,
+                "timestamp": e.created_at,
+            })
+            prev_phase = curr_phase
+
     phase_progress = []
     phase_order = [
         ("clarify_identify", "Identify"),
@@ -714,6 +726,7 @@ def _serialize_session(session: Any) -> dict[str, Any]:
             for dp in session.decision_points
         ] if session.decision_points else [],
         "events": events,
+        "event_timeline": event_timeline,
         "phase_progress": phase_progress,
         "needs_human": needs_human,
         "human_actions": human_actions,
