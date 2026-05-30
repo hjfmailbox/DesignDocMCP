@@ -65,7 +65,7 @@
 
 ## Loop 5 — Add JSON export format support
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** Extend document generation with a structured JSON export alongside existing Markdown and HTML.
 

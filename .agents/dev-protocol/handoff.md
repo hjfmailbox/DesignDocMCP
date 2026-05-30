@@ -59,11 +59,13 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Loop 4 complete: E2E coverage expanded with pause/resume, heartbeat, and phase transitions. 76 tests passing. Ready for Loop 5.
+All 5 loops complete. 78 tests passing. Deferred improvements D2/D3/D5/D8/D10 resolved. Awaiting user direction for next phase.
 
 ## Next Recommended Actions
 
-1. **Loop 5** — Add JSON export format support
+1. **Generate new plan** for next phase (v2.0 decision-points, deterministic replay, or user-defined)
+2. **Run `/dev-scope`** for a specific user goal
+3. **Review deferred-improvements.txt** for remaining P1 items (D1 deterministic replay, D4 clarify rewrite round safety, D6 session recovery)
 
 ## Notes For Next Session
 
@@ -137,3 +139,19 @@ No models.py changes needed; `RequirementDelta` already contains all required fi
 
 ### Key finding during implementation
 `force_skip_clarification` requires current phase to be one of the clarification phases (not CREATED). Test must call `start-clarification` first to advance phase before skipping.
+
+---
+
+## Loop 5 — JSON export format support (Completed 2026-05-30)
+
+**Status:** Completed
+**Commit:** `ed13253` — `feat(export): add JSON design document generation`
+**Tests:** 78 passing (76 → 78)
+
+### What changed
+- `src/designdoc_mcp/document.py` — Added `generate_design_document_json()` exporting structured session data (requirements, agents, proposals, deltas, votes, decision_points, etc.)
+- `src/designdoc_mcp/server.py` — Registered `generate_design_document_json` MCP tool
+- `tests/test_engine.py` — Added `TestJsonExport` with 2 tests
+
+### Key finding during implementation
+`add_requirement_delta` mutates the base requirement's `problem_statement` by appending supplementary requirements. JSON export correctly captures both the mutated requirement and the original deltas list.
