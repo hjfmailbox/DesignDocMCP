@@ -154,6 +154,39 @@ def generate_full_output(session: Session) -> dict[str, str]:
     }
 
 
+import json as _json
+
+
+def generate_design_document_json(session: Session) -> str:
+    """Generate a structured JSON design document from the session."""
+    data = {
+        "session_id": session.session_id,
+        "title": session.title,
+        "description": session.description,
+        "status": session.status.value,
+        "phase": session.current_phase.value,
+        "round": session.current_round,
+        "clarify_round": session.clarify_round,
+        "requirement": session.requirement.model_dump() if session.requirement else None,
+        "agents": [a.model_dump() for a in session.agents],
+        "assumptions": [a.model_dump() for a in session.assumptions],
+        "merged_assumptions": [g.model_dump() for g in session.merged_assumptions],
+        "refined_requirements": [r.model_dump() for r in session.refined_requirements],
+        "proposals": [p.model_dump() for p in session.proposals],
+        "challenges": [c.model_dump() for c in session.challenges],
+        "revisions": [rv.model_dump() for rv in session.revisions],
+        "optimizations": [o.model_dump() for o in session.optimizations],
+        "devils_advocates": [d.model_dump() for d in session.devils_advocates],
+        "consensus_votes": [v.model_dump() for v in session.consensus_votes],
+        "human_votes": [hv.model_dump() for hv in session.human_votes],
+        "decision_points": [dp.model_dump() for dp in session.decision_points],
+        "requirement_deltas": [d.model_dump() for d in session.requirement_deltas],
+        "pending_questions": [q.model_dump() for q in session.pending_questions],
+        "events_count": len(session.events),
+    }
+    return _json.dumps(data, indent=2, default=str)
+
+
 def generate_design_document_html(session: Session) -> str:
     """Generate a basic HTML design document from the session."""
     md = generate_design_document(session)

@@ -18,7 +18,7 @@ from .constants import (
     WAIT_FOR_TASK_MIN_TIMEOUT,
     WAIT_FOR_TASK_TIMEOUT,
 )
-from .document import generate_debate_summary, generate_design_document as _generate_design_document, generate_adr, generate_full_output, generate_human_decision_points
+from .document import generate_debate_summary, generate_design_document as _generate_design_document, generate_adr, generate_full_output, generate_human_decision_points, generate_design_document_json as _generate_design_document_json
 from .engine import CollaborationEngine
 from .models import DebatePhase, SessionStatus, VoteType
 from .store import SessionStore
@@ -1322,6 +1322,29 @@ def generate_design_document_html(session_id: str) -> str:
     if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
         return f"Session is in '{session.status.value}' status. Please complete the debate before generating the design document."
     return _generate_design_document_html(session)
+
+
+@mcp.tool()
+def generate_design_document_json(session_id: str) -> str:
+    """Generate a structured JSON design document from the completed debate.
+
+    Call this after the session is completed (consensus reached or human approved).
+    Returns a JSON representation of the session data including requirements,
+    proposals, decisions, and deltas.
+
+    Args:
+        session_id: The session identifier
+
+    Returns:
+        The generated JSON design document content
+    """
+    store = _get_store()
+    session = store.get_session(session_id)
+    if session is None:
+        return f"Session '{session_id}' not found."
+    if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
+        return f"Session is in '{session.status.value}' status. Please complete the debate before generating the design document."
+    return _generate_design_document_json(session)
 
 
 @mcp.resource("designdoc://sessions")

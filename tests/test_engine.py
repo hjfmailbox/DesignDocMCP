@@ -1063,6 +1063,45 @@ class TestHtmlExport:
         assert "</html>" in html
 
 
+class TestJsonExport:
+    def test_json_export_contains_session_data(self, engine):
+        """JSON export 包含 session 结构化数据"""
+        session = engine.create_session(title="JSON Test Session", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a web app")
+        engine.register_agent(session_id=sid, name="Agent1")
+        engine.add_requirement_delta(sid, delta_statement="Add auth")
+
+        from designdoc_mcp.document import generate_design_document_json
+        json_str = generate_design_document_json(engine._get(sid))
+
+        import json
+        data = json.loads(json_str)
+        assert data["session_id"] == sid
+        assert data["title"] == "JSON Test Session"
+        assert "Build a web app" in data["requirement"]["problem_statement"]
+        assert len(data["agents"]) == 1
+        assert data["agents"][0]["name"] == "Agent1"
+        assert len(data["requirement_deltas"]) == 1
+        assert data["requirement_deltas"][0]["problem_statement"] == "Add auth"
+
+    def test_json_export_valid_json(self, engine):
+        """JSON export 输出是合法 JSON"""
+        session = engine.create_session(title="JSON Valid", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+
+        from designdoc_mcp.document import generate_design_document_json
+        json_str = generate_design_document_json(engine._get(sid))
+
+        import json
+        data = json.loads(json_str)
+        assert isinstance(data, dict)
+        assert "session_id" in data
+        assert "status" in data
+        assert "phase" in data
+
+
 class TestMultiHumanReview:
     def _setup_human_review_session(self, engine):
         session = engine.create_session(title="Multi-Human Review", description="Test")
