@@ -109,7 +109,7 @@ async def get_session_detail(session_id: str):
     store = _get_store()
     session = store.get_session(session_id)
     if session is None:
-        return {"error": "Session not found"}
+        raise HTTPException(status_code=404, detail="Session not found")
     return _serialize_session(session)
 
 
@@ -143,7 +143,7 @@ async def get_session_document(session_id: str):
     store = _get_store()
     session = store.get_session(session_id)
     if session is None:
-        return {"error": "Session not found"}
+        raise HTTPException(status_code=404, detail="Session not found")
     return {"document": generate_design_document(session)}
 
 
@@ -191,10 +191,10 @@ async def human_decision_api(session_id: str, request: Request, _auth=Depends(_v
         elif action == "override":
             engine.human_override(session_id, "human", decision=decision or action, rationale=rationale or reason)
         else:
-            return {"error": f"Unknown action: {action}"}
+            raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
         return {"status": "ok"}
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/force-skip-clarification")
@@ -204,7 +204,7 @@ async def force_skip_clarification_api(session_id: str, _auth=Depends(_verify_to
         result = engine.force_skip_clarification(session_id)
         return result
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/check-stalled")
@@ -227,7 +227,7 @@ async def create_session_api(request: Request, _auth=Depends(_verify_token)):
     min_rounds = body.get("min_rounds", DEFAULT_MIN_ROUNDS)
     max_rounds = body.get("max_rounds", DEFAULT_MAX_ROUNDS)
     if not title:
-        return {"error": "title is required"}
+        raise HTTPException(status_code=400, detail="title is required")
     engine = _get_engine()
     session = engine.create_session(title, description, min_rounds=min_rounds, max_rounds=max_rounds)
     return {"session_id": session.session_id, "title": session.title}
@@ -278,7 +278,7 @@ async def register_agent_auto_api(request: Request, _auth=Depends(_verify_token)
             "runtime_mode": result.runtime_mode,
         }
     except ValueError as e:
-        return {"action": "error", "message": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/register-agent")
@@ -303,7 +303,7 @@ async def register_agent_api(session_id: str, request: Request, _auth=Depends(_v
             "runtime_mode": result.runtime_mode,
         }
     except ValueError as e:
-        return {"action": "error", "message": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/start-clarification")
@@ -313,7 +313,7 @@ async def start_clarification_api(session_id: str, _auth=Depends(_verify_token))
         result = engine.start_clarification(session_id)
         return result
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/generate-document")
@@ -321,9 +321,9 @@ async def generate_document_api(session_id: str, _auth=Depends(_verify_token)):
     store = _get_store()
     session = store.get_session(session_id)
     if session is None:
-        return {"error": "Session not found"}
+        raise HTTPException(status_code=404, detail="Session not found")
     if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
-        return {"error": f"Session is in '{session.status.value}' status. Please complete the debate before generating the design document."}
+        raise HTTPException(status_code=400, detail=f"Session is in '{session.status.value}' status. Please complete the debate before generating the design document.")
     doc = generate_design_document(session)
     return {"document": doc}
 
@@ -335,7 +335,7 @@ async def archive_session_api(session_id: str, _auth=Depends(_verify_token)):
         engine.archive_session(session_id)
         return {"status": "ok"}
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/pause")
@@ -344,7 +344,7 @@ async def pause_session_api(session_id: str, _auth=Depends(_verify_token)):
     try:
         return engine.pause_session(session_id=session_id)
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/resume")
@@ -353,7 +353,7 @@ async def resume_session_api(session_id: str, _auth=Depends(_verify_token)):
     try:
         return engine.resume_session(session_id=session_id)
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/resolve-decision-point")
@@ -367,7 +367,7 @@ async def resolve_decision_point_api(session_id: str, request: Request, _auth=De
         result = engine.resolve_decision_point(session_id=session_id, decision_id=decision_id, choice=choice, custom=custom)
         return result
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.delete("/api/sessions/{session_id}")
@@ -375,7 +375,7 @@ async def delete_session_api(session_id: str, _auth=Depends(_verify_token)):
     store = _get_store()
     session = store.get_session(session_id)
     if session is None:
-        return {"error": "Session not found"}
+        raise HTTPException(status_code=404, detail="Session not found")
     store.delete_session(session_id)
     return {"status": "ok"}
 
@@ -387,7 +387,7 @@ async def upload_requirement_api(session_id: str, request: Request, _auth=Depend
         form = await request.form()
         file = form.get("file")
         if file is None:
-            return {"error": "No file provided"}
+            raise HTTPException(status_code=400, detail="No file provided")
         text = (await file.read()).decode("utf-8", errors="replace")
     else:
         body = await request.json()
@@ -411,7 +411,7 @@ async def add_requirement_delta_api(session_id: str, request: Request, _auth=Dep
         )
         return result
     except ValueError as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 def _check_needs_human(session: Any) -> bool:

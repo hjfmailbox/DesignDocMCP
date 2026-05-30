@@ -72,10 +72,10 @@ class TestCreateSessionToDocumentFlow:
         sid = resp.json()["session_id"]
 
         resp = api_client.post(f"/api/sessions/{sid}/generate-document")
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         data = resp.json()
-        assert "error" in data
-        assert "complete the debate" in data["error"].lower() or "CREATED" in data["error"]
+        assert "detail" in data
+        assert "complete the debate" in data["detail"].lower() or "CREATED" in data["detail"]
 
 
 class TestHumanDecisionFlow:
@@ -127,32 +127,48 @@ class TestHumanDecisionFlow:
 
 
 class TestInvalidSession:
-    def test_invalid_session_returns_error_consistently(self, api_client):
-        """多个 endpoint 对无效 session_id 行为一致（返回 error JSON）"""
+    def test_invalid_session_returns_404_consistently(self, api_client):
+        """多个 endpoint 对无效 session_id 行为一致（返回 HTTP 404）"""
         bad_sid = "nonexistent-session-id"
 
         # GET /session
         resp = api_client.get(f"/api/sessions/{bad_sid}")
-        assert resp.status_code == 200
-        assert "error" in resp.json()
+        assert resp.status_code == 404
+        assert "detail" in resp.json()
 
         # POST /generate-document
         resp = api_client.post(f"/api/sessions/{bad_sid}/generate-document")
-        assert resp.status_code == 200
-        assert "error" in resp.json()
-
-        # POST /human-decision
-        resp = api_client.post(
-            f"/api/sessions/{bad_sid}/human-decision",
-            json={"action": "approve", "reason": "test"},
-        )
-        assert resp.status_code == 200
-        assert "error" in resp.json()
+        assert resp.status_code == 404
+        assert "detail" in resp.json()
 
         # GET /document
         resp = api_client.get(f"/api/sessions/{bad_sid}/document")
-        assert resp.status_code == 200
-        assert "error" in resp.json()
+        assert resp.status_code == 404
+        assert "detail" in resp.json()
+
+    def test_create_session_missing_title_returns_400(self, api_client):
+        """创建 session 缺少 title 返回 HTTP 400"""
+        resp = api_client.post("/api/sessions/create", json={"title": "", "description": "Test"})
+        assert resp.status_code == 400
+        assert "detail" in resp.json()
+
+    def test_human_decision_unknown_action_returns_400(self, api_client):
+        """human-decision 未知 action 返回 HTTP 400"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Action Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        from designdoc_mcp.web import _get_engine
+        engine = _get_engine()
+        session = engine._get(sid)
+        session.status = SessionStatus.HUMAN_REVIEW
+        engine.store.update_session(session)
+
+        resp = api_client.post(
+            f"/api/sessions/{sid}/human-decision",
+            json={"action": "unknown", "reason": "test"},
+        )
+        assert resp.status_code == 400
+        assert "detail" in resp.json()
 
 
 class TestEventStream:
