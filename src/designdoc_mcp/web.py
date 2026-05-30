@@ -379,6 +379,27 @@ async def get_decision_points_api(session_id: str):
     return [dp.model_dump() for dp in session.decision_points]
 
 
+@web_app.post("/api/sessions/{session_id}/bulk-resolve-decisions")
+async def bulk_resolve_decisions_api(session_id: str, request: Request, _auth=Depends(_verify_token)):
+    body = await request.json()
+    strategy = body.get("strategy", "majority")
+    preview = body.get("preview", False)
+    store = _get_store()
+    session = store.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    engine = _get_engine()
+    try:
+        result = engine.bulk_resolve_decision_points(
+            session_id=session_id,
+            strategy=strategy,
+            preview=preview,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @web_app.delete("/api/sessions/{session_id}")
 async def delete_session_api(session_id: str, _auth=Depends(_verify_token)):
     store = _get_store()

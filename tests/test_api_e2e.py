@@ -327,6 +327,120 @@ class TestDecisionPointsApi:
         assert "detail" in resp.json()
 
 
+class TestBulkResolveDecisionsApi:
+    def test_bulk_resolve_returns_resolved_list(self, api_client):
+        """POST /bulk-resolve-decisions 返回 resolved / skipped 结构"""
+        from designdoc_mcp.models import DebatePhase
+        from designdoc_mcp.server import _get_engine
+
+        resp = api_client.post("/api/sessions/create", json={"title": "Bulk DP", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        engine = _get_engine()
+        engine.register_agent(sid, name="agent_a")
+
+        session = engine._get(sid)
+        session.current_phase = DebatePhase.CRITIC
+        engine.store._save(session)
+
+        engine.submit_decision_points(
+            sid,
+            "agent_a",
+            [
+                {
+                    "topic": "Database",
+                    "description": "Choose database",
+                    "options": [
+                        {"option_id": "opt1", "label": "PostgreSQL", "proposed_by": "agent_a"},
+                        {"option_id": "opt2", "label": "MySQL", "proposed_by": "agent_a"},
+                    ],
+                    "constraints": [],
+                }
+            ],
+        )
+
+        resp = api_client.post(
+            f"/api/sessions/{sid}/bulk-resolve-decisions",
+            json={"strategy": "majority", "preview": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "resolved" in data
+        assert "skipped" in data
+        assert len(data["resolved"]) == 1
+        assert data["resolved"][0]["topic"] == "Database"
+        assert data["preview"] is False
+
+    def test_bulk_resolve_invalid_session_404(self, api_client):
+        """无效 session 返回 404"""
+        resp = api_client.post(
+            "/api/sessions/nonexistent/bulk-resolve-decisions",
+            json={"strategy": "majority", "preview": False},
+        )
+        assert resp.status_code == 404
+        assert "detail" in resp.json()
+
+    def test_bulk_resolve_preview_vs_apply(self, api_client):
+        """preview 不修改 decision points，apply 后 human_choice 已设置"""
+        from designdoc_mcp.models import DebatePhase
+        from designdoc_mcp.server import _get_engine
+
+        resp = api_client.post("/api/sessions/create", json={"title": "Preview Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        engine = _get_engine()
+        engine.register_agent(sid, name="agent_a")
+
+        session = engine._get(sid)
+        session.current_phase = DebatePhase.CRITIC
+        engine.store._save(session)
+
+        engine.submit_decision_points(
+            sid,
+            "agent_a",
+            [
+                {
+                    "topic": "Cache",
+                    "description": "Choose cache",
+                    "options": [
+                        {"option_id": "opt1", "label": "Redis", "proposed_by": "agent_a"},
+                    ],
+                    "constraints": [],
+                }
+            ],
+        )
+
+        # Preview: should return resolved but not modify
+        resp = api_client.post(
+            f"/api/sessions/{sid}/bulk-resolve-decisions",
+            json={"strategy": "majority", "preview": True},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["preview"] is True
+        assert len(data["resolved"]) == 1
+
+        # Verify human_choice is still empty
+        resp = api_client.get(f"/api/sessions/{sid}/decision-points")
+        dp_list = resp.json()
+        assert dp_list[0]["human_choice"] == ""
+
+        # Apply: should modify
+        resp = api_client.post(
+            f"/api/sessions/{sid}/bulk-resolve-decisions",
+            json={"strategy": "majority", "preview": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["preview"] is False
+        chosen_option_id = data["resolved"][0]["chosen_option_id"]
+
+        # Verify human_choice is now set
+        resp = api_client.get(f"/api/sessions/{sid}/decision-points")
+        dp_list = resp.json()
+        assert dp_list[0]["human_choice"] == chosen_option_id
+
+
 class TestDebatePhaseTransitions:
     def test_force_skip_clarification_advances_phase(self, api_client):
         """force-skip-clarification 将 phase 从 CREATED 推进到 PROPOSAL"""

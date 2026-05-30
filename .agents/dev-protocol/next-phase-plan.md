@@ -40,8 +40,9 @@
 
 ## Loop 2 — REST endpoint exposure
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1
+**Tests:** 97 passing (94 → 97)
 
 **Goal:** 在 Web API 暴露 `POST /api/sessions/{session_id}/bulk-resolve-decisions` 端点，使外部工具可调用一键批量解决能力。
 
