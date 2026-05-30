@@ -59,12 +59,11 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Loop 3 complete: RequirementDelta hierarchy exposed in session APIs. 71 tests passing. Ready for Loop 4.
+Loop 4 complete: E2E coverage expanded with pause/resume, heartbeat, and phase transitions. 76 tests passing. Ready for Loop 5.
 
 ## Next Recommended Actions
 
-1. **Loop 4** — Expand E2E API coverage for debate/undo flows
-2. **Loop 5** — Add JSON export format support
+1. **Loop 5** — Add JSON export format support
 
 ## Notes For Next Session
 
@@ -121,3 +120,20 @@ Response body format changed from custom `{"error": "..."}` / `{"action": "error
 
 ### Key finding during implementation
 No models.py changes needed; `RequirementDelta` already contains all required fields. Only engine serialization needed updates.
+
+---
+
+## Loop 4 — E2E API coverage expansion (Completed 2026-05-30)
+
+**Status:** Completed
+**Commit:** `1e3e083` — `test(e2e): expand API coverage for pause/resume, heartbeat, and phase transitions`
+**Tests:** 76 passing (71 → 76)
+
+### What changed
+- `tests/test_api_e2e.py` — Added 3 new test classes:
+  - `TestSessionPauseResumeLifecycle` — pause/resume cycle + double-pause 400 guard
+  - `TestAgentHeartbeat` — heartbeat updates `last_active_at` to "just now"
+  - `TestDebatePhaseTransitions` — `start-clarification` → `force-skip-clarification` → PROPOSAL + no-agent guard
+
+### Key finding during implementation
+`force_skip_clarification` requires current phase to be one of the clarification phases (not CREATED). Test must call `start-clarification` first to advance phase before skipping.

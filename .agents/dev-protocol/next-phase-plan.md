@@ -50,7 +50,7 @@
 
 ## Loop 4 — Expand E2E API coverage for debate and undo flows
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** Add E2E test suites covering multi-agent disagreement paths, undo lifecycle, and agent reconnect flows.
 
