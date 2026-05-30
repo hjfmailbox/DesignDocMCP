@@ -75,7 +75,7 @@
 
 ## Loop 4 — MCP active-session resource
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2（MCP 协议完整性，specification.md 已声明但未完全验证）
 
 **Goal:** 补全 `@mcp.resource("designdoc://active-session")` 实现，确保其返回当前活跃会话的结构化 JSON 摘要（含 session_id, title, phase, status, agent_count）。

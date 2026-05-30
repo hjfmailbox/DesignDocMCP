@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -1380,20 +1381,21 @@ def active_session_resource() -> str:
     sessions = store.list_sessions()
     active = [s for s in sessions if s.status.value not in ("archived", "completed")]
     if not active:
-        return "No active sessions. Create one via the Web UI at http://localhost:8765"
+        return json.dumps({"message": "No active sessions. Create one via the Web UI at http://localhost:8765"}, indent=2)
     if len(active) == 1:
         s = active[0]
-        agents_str = ", ".join(a.name for a in s.agents) if s.agents else "none"
-        req_status = "has requirement" if s.requirement else "no requirement"
-        return (
-            f"Active Session: {s.session_id}\n"
-            f"Title: {s.title}\n"
-            f"Status: {s.status.value} | Phase: {s.current_phase.value} | Round: {s.current_round}\n"
-            f"Requirement: {req_status}\n"
-            f"Agents: {agents_str}\n"
-            f"\nRegister now: /register {s.session_id}"
-        )
-    return f"Multiple active sessions ({len(active)}). Use /register to see and choose, or check designdoc://sessions for details."
+        data = {
+            "session_id": s.session_id,
+            "title": s.title,
+            "status": s.status.value,
+            "phase": s.current_phase.value,
+            "round": s.current_round,
+            "clarify_round": s.clarify_round,
+            "agent_count": len(s.agents),
+            "requirement_submitted": s.requirement is not None,
+        }
+        return json.dumps(data, indent=2)
+    return json.dumps({"message": f"Multiple active sessions ({len(active)}). Use /register to see and choose, or check designdoc://sessions for details."}, indent=2)
 
 
 @mcp.resource("designdoc://session/{session_id}")
