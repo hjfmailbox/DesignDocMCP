@@ -59,14 +59,13 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Loop 1 of new phase complete: `revert_to_event` now truncates `requirement_deltas`. 67 tests passing. Ready for Loop 2.
+Loop 2 complete: API error responses standardized to 404/400. 69 tests passing. Ready for Loop 3.
 
 ## Next Recommended Actions
 
-1. **Loop 2** — Standardize API error HTTP status codes (200+error JSON → 404/400)
-2. **Loop 3** — Expose RequirementDelta hierarchy in session APIs
-3. **Loop 4** — Expand E2E API coverage for debate/undo flows
-4. **Loop 5** — Add JSON export format support
+1. **Loop 3** — Expose RequirementDelta hierarchy in session APIs
+2. **Loop 4** — Expand E2E API coverage for debate/undo flows
+3. **Loop 5** — Add JSON export format support
 
 ## Notes For Next Session
 
@@ -88,3 +87,21 @@ Loop 1 of new phase complete: `revert_to_event` now truncates `requirement_delta
 
 ### Key finding during implementation
 `RequirementDelta` and its corresponding `_add_event` system event share the same microsecond `created_at` because they are instantiated back-to-back in `add_requirement_delta()`. Regression test avoids time collision by capturing the target event *before* adding deltas, then reverting.
+
+---
+
+## Loop 2 — API error HTTP status codes (Completed 2026-05-30)
+
+**Status:** Completed
+**Commit:** `591fc86` — `fix(api): standardize HTTP error status codes`
+**Tests:** 69 passing (67 → 69)
+
+### What changed
+- `src/designdoc_mcp/web.py` — All `return {"error": ...}` and `return {"action": "error", ...}` replaced with `raise HTTPException(...)`:
+  - invalid session → `404`
+  - validation failure / unknown action / missing title → `400`
+  - ValueError catch-all → `400`
+- `tests/test_api_e2e.py` — Updated `TestInvalidSession` to assert `404` + `detail`; added `test_create_session_missing_title_returns_400` and `test_human_decision_unknown_action_returns_400`
+
+### Compatibility note
+Response body format changed from custom `{"error": "..."}` / `{"action": "error", "message": "..."}` to FastAPI standard `{"detail": "..."}`. Any client parsing the old format must update.

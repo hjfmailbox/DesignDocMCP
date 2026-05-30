@@ -10,12 +10,12 @@ project:
 
 state:
   current_phase: scenario_expansion
-  current_focus: loop_1_delta_truncation_complete
-  active_work: awaiting_loop_2_or_user_direction
+  current_focus: loop_2_api_error_complete
+  active_work: awaiting_loop_3_or_user_direction
   blockers: none_detected
   last_activity:
-    commit: "f96c225f85852f1804825713973a6cc48c6ba932"
-    message: "docs(sync): align documentation with code reality after external validation loops"
+    commit: "591fc86f626bfcde5240f79618696284eb17e5c1"
+    message: "fix(api): standardize HTTP error status codes"
     date: "2026-05-30"
 
 version_tracking:
@@ -43,17 +43,17 @@ version_tracking:
     - external_validation_loop_3_multi_human_review
     - external_validation_docs_sync_loop_4_7
     - loop_1_revert_delta_truncation
+    - loop_2_api_error_status_codes
   in_progress: []
   pending:
-    - loop_2_api_error_status_codes
     - loop_3_delta_hierarchy_api
     - loop_4_e2e_coverage_expansion
     - loop_5_json_export
 
 checkpoint:
-  last_commit: "32db1f12b5de20d267a4e31bf523233d494d5383"
+  last_commit: "591fc86f626bfcde5240f79618696284eb17e5c1"
   last_updated: "2026-05-30"
-  summary: "Loop 1 complete: revert_to_event now truncates requirement_deltas. 67 tests passing. Next: Loop 2 API error status codes."
+  summary: "Loop 2 complete: API error responses standardized to 404/400 via HTTPException. 69 tests passing. Next: Loop 3 delta hierarchy API exposure."
 
 git:
   branch: master

@@ -20,7 +20,7 @@
 
 ## Loop 2 — Standardize API error HTTP status codes
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** Change invalid-session and validation-failure responses from `200 + {"error":"..."}` to proper HTTP status codes (`404 Not Found`, `400 Bad Request`).
 
