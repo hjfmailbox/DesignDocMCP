@@ -59,13 +59,12 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Loop 2 complete: API error responses standardized to 404/400. 69 tests passing. Ready for Loop 3.
+Loop 3 complete: RequirementDelta hierarchy exposed in session APIs. 71 tests passing. Ready for Loop 4.
 
 ## Next Recommended Actions
 
-1. **Loop 3** — Expose RequirementDelta hierarchy in session APIs
-2. **Loop 4** — Expand E2E API coverage for debate/undo flows
-3. **Loop 5** — Add JSON export format support
+1. **Loop 4** — Expand E2E API coverage for debate/undo flows
+2. **Loop 5** — Add JSON export format support
 
 ## Notes For Next Session
 
@@ -105,3 +104,20 @@ Loop 2 complete: API error responses standardized to 404/400. 69 tests passing. 
 
 ### Compatibility note
 Response body format changed from custom `{"error": "..."}` / `{"action": "error", "message": "..."}` to FastAPI standard `{"detail": "..."}`. Any client parsing the old format must update.
+
+---
+
+## Loop 3 — Expose RequirementDelta hierarchy in session APIs (Completed 2026-05-30)
+
+**Status:** Completed
+**Commit:** `d2c0f58` — `feat(api): expose RequirementDelta hierarchy in session summary and flow`
+**Tests:** 71 passing (69 → 71)
+
+### What changed
+- `src/designdoc_mcp/engine.py` — `get_session_summary()` and `get_session_flow()` now include:
+  - `requirement_deltas_count`
+  - `requirement_deltas` list with `delta_id`, `parent_delta_id`, `problem_statement`, `created_at`
+- `tests/test_engine.py` — Added `test_deltas_exposed_in_session_summary` and `test_deltas_exposed_in_session_flow`
+
+### Key finding during implementation
+No models.py changes needed; `RequirementDelta` already contains all required fields. Only engine serialization needed updates.

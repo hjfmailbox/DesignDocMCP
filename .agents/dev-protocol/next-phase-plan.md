@@ -35,7 +35,7 @@
 
 ## Loop 3 — Expose RequirementDelta hierarchy in session APIs
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** Make `RequirementDelta` parent-child relations visible in `get_session_summary()` and `get_session_flow()` so the requirement evolution tree can be inspected.
 
