@@ -351,6 +351,30 @@ def resolve_decision_point(
 
 
 @mcp.tool()
+def bulk_resolve_decision_points(
+    session_id: str,
+    strategy: str = "majority",
+    preview: bool = False,
+) -> dict[str, Any]:
+    """Resolve all unresolved decision points in bulk using a given strategy.
+
+    Automatically selects the best option for each decision point based on
+    agent support counts (majority strategy). Use preview=True to see what
+    would be chosen without applying changes.
+
+    Args:
+        session_id: The session identifier
+        strategy: Resolution strategy. Only "majority" is supported.
+        preview: If True, returns what would be chosen without modifying session.
+
+    Returns:
+        dict with keys: resolved, skipped, preview
+    """
+    engine = _get_engine()
+    return engine.bulk_resolve_decision_points(session_id=session_id, strategy=strategy, preview=preview)
+
+
+@mcp.tool()
 def pause_session(session_id: str) -> dict[str, Any]:
     """Pause a session. Agents cannot submit while paused.
 

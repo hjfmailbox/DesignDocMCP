@@ -46,3 +46,77 @@ class TestActiveSessionResource:
         assert "phase" in data
         assert "status" in data
         assert "agent_count" in data
+
+
+class TestBulkResolveMcpTool:
+    def test_bulk_resolve_mcp_tool_returns_resolved(self, server_store):
+        from designdoc_mcp.models import DebatePhase
+        from designdoc_mcp.server import _get_engine, bulk_resolve_decision_points
+
+        engine = _get_engine()
+        session = engine.create_session(title="MCP Bulk Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="agent_a")
+
+        session = engine._get(sid)
+        session.current_phase = DebatePhase.CRITIC
+        engine.store._save(session)
+
+        engine.submit_decision_points(
+            sid,
+            "agent_a",
+            [
+                {
+                    "topic": "Database",
+                    "description": "Choose DB",
+                    "options": [
+                        {"label": "PostgreSQL", "reasoning": "Reliable"},
+                    ],
+                    "constraints": [],
+                }
+            ],
+        )
+
+        result = bulk_resolve_decision_points(sid, strategy="majority", preview=False)
+        assert "resolved" in result
+        assert "skipped" in result
+        assert len(result["resolved"]) == 1
+        assert result["resolved"][0]["topic"] == "Database"
+        assert result["preview"] is False
+
+    def test_bulk_resolve_mcp_tool_preview_mode(self, server_store):
+        from designdoc_mcp.models import DebatePhase
+        from designdoc_mcp.server import _get_engine, bulk_resolve_decision_points
+
+        engine = _get_engine()
+        session = engine.create_session(title="MCP Preview Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="agent_a")
+
+        session = engine._get(sid)
+        session.current_phase = DebatePhase.CRITIC
+        engine.store._save(session)
+
+        engine.submit_decision_points(
+            sid,
+            "agent_a",
+            [
+                {
+                    "topic": "Cache",
+                    "description": "Choose cache",
+                    "options": [
+                        {"label": "Redis", "reasoning": "Fast"},
+                    ],
+                    "constraints": [],
+                }
+            ],
+        )
+
+        result = bulk_resolve_decision_points(sid, strategy="majority", preview=True)
+        assert result["preview"] is True
+        assert len(result["resolved"]) == 1
+        assert result["resolved"][0]["chosen_label"] == "Redis"
+
+        # Verify session was not modified
+        session = engine._get(sid)
+        assert session.decision_points[0].human_choice == ""

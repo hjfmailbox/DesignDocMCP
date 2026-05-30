@@ -60,8 +60,9 @@
 
 ## Loop 3 — MCP tool exposure
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2
+**Tests:** 99 passing (97 → 99)
 
 **Goal:** 在 MCP server 注册 `bulk_resolve_decision_points` tool，保持 MCP 与 REST 能力对等。
 
