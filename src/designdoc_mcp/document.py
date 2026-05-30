@@ -270,10 +270,12 @@ def _add_overview(lines: list[str], session: Session) -> None:
 
 
 def _add_requirement(lines: list[str], session: Session) -> None:
-    if not session.requirement:
-        return
     lines.append(f"## Requirement")
     lines.append(f"")
+    if not session.requirement:
+        lines.append(f"*No requirement has been submitted for this session.*")
+        lines.append(f"")
+        return
     if session.requirement.is_refined and session.requirement.original_statement:
         lines.append(f"### Original (Fuzzy) Requirement")
         lines.append(f"")
@@ -286,8 +288,13 @@ def _add_requirement(lines: list[str], session: Session) -> None:
 
 
 def _add_goals_and_constraints(lines: list[str], session: Session) -> None:
+    lines.append(f"## Goals & Constraints")
+    lines.append(f"")
     if not session.requirement:
+        lines.append(f"*No goals or constraints specified.*")
+        lines.append(f"")
         return
+
     has_content = False
 
     if session.requirement.acceptance_criteria:
@@ -322,12 +329,18 @@ def _add_goals_and_constraints(lines: list[str], session: Session) -> None:
             lines.append(f"- {f}")
         lines.append(f"")
 
-    if has_content:
-        lines.append("")
+    if not has_content:
+        lines.append(f"*No goals or constraints specified.*")
+        lines.append(f"")
 
 
 def _add_assumption_decisions(lines: list[str], session: Session) -> None:
+    lines.append(f"## Assumption Decisions (from Clarification Phase)")
+    lines.append(f"")
+
     if not session.merged_assumptions:
+        lines.append(f"*No assumptions were resolved during the clarification phase.*")
+        lines.append(f"")
         return
 
     resolved_assumptions = []
@@ -337,10 +350,10 @@ def _add_assumption_decisions(lines: list[str], session: Session) -> None:
                 resolved_assumptions.append((group.dimension, a))
 
     if not resolved_assumptions:
+        lines.append(f"*No assumptions were resolved during the clarification phase.*")
+        lines.append(f"")
         return
 
-    lines.append(f"## Assumption Decisions (from Clarification Phase)")
-    lines.append(f"")
     lines.append(f"The following assumptions were identified and resolved during the clarification phase:")
     lines.append(f"")
 
@@ -396,9 +409,11 @@ def _add_technical_decisions(lines: list[str], session: Session) -> None:
     lines.append(f"## Technical Decisions")
     lines.append(f"")
 
+    has_content = False
     proposals = _get_latest_proposals(session)
     for p in proposals:
         if p.tech_stack:
+            has_content = True
             agent_name = _agent_name(session, p.agent_id)
             lines.append(f"### Tech Stack ({agent_name})")
             lines.append(f"")
@@ -407,6 +422,7 @@ def _add_technical_decisions(lines: list[str], session: Session) -> None:
 
     optimizations = _get_latest_optimizations(session)
     if optimizations:
+        has_content = True
         lines.append(f"### Optimizations")
         lines.append(f"")
         for o in optimizations:
@@ -417,6 +433,10 @@ def _add_technical_decisions(lines: list[str], session: Session) -> None:
             if o.tradeoff:
                 lines.append(f"- Tradeoff: {o.tradeoff}")
             lines.append(f"")
+
+    if not has_content:
+        lines.append(f"*No technical decisions recorded yet.*")
+        lines.append(f"")
 
 
 def _add_data_model_and_api(lines: list[str], session: Session) -> None:
@@ -464,10 +484,12 @@ def _add_implementation_plan(lines: list[str], session: Session) -> None:
 
 
 def _add_acceptance_criteria(lines: list[str], session: Session) -> None:
-    if not session.requirement or not session.requirement.acceptance_criteria:
-        return
     lines.append(f"## Acceptance Criteria")
     lines.append(f"")
+    if not session.requirement or not session.requirement.acceptance_criteria:
+        lines.append(f"*No acceptance criteria defined.*")
+        lines.append(f"")
+        return
     for ac in session.requirement.acceptance_criteria:
         lines.append(f"- [ ] {ac}")
     lines.append(f"")
