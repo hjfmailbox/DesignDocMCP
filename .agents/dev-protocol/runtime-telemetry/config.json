@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "record_command_args": true,
+  "record_git_context": true
+}

@@ -5,19 +5,48 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-All 4 product-value loops complete. 89 tests passing. Awaiting user direction for next phase.
+Phase A — Bulk Human Decision 全部完成。99 tests passing。等待用户定义下一阶段方向。
 
 ## Next Recommended Actions
 
-1. **Generate new plan** for next phase (v2.0 decision-points workflow completion, frontend observability, or user-defined)
+1. **Generate new plan** for next phase (Phase B frontend decision-point cards, PDF export, agent health panel, or user-defined)
 2. **Run `/dev-scope`** for a specific user goal
 3. **Review deferred-improvements.txt** for remaining P1 items if technical debt becomes blocking
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` all loops completed. Plan file retained for reference.
+- `next-phase-plan.md` Phase A 全部 loops completed。计划文件保留供参考。
 - `current-focus.md` and `issues.md` accurately reflect code reality.
 - No blockers. Workspace is clean. Ready for next phase.
+- Checkpoint 已同步至 `db9285c`（Phase A 全部 3 个 loops）。
+
+---
+
+## Phase A — Bulk Human Decision (Completed 2026-05-30)
+
+**Status:** Completed
+**Tests:** 99 passing (89 → 99)
+
+### Loop 1 — Engine bulk resolve with dynamic support counting
+**Commit:** `704dd3e` — `feat(engine): add bulk resolve decision points with dynamic support counting`
+
+- `src/designdoc_mcp/engine.py` — `_merge_decision_points` 合并时动态记录各选项 agent 支持数至 `session.metadata["decision_point_supports"]`；新增 `bulk_resolve_decision_points(strategy, preview)`
+- `tests/test_engine.py` — 新增 5 个测试（合并计数、majority 选择、preview 不修改、旧 session 回退、并列取第一个）
+
+### Loop 2 — REST endpoint exposure
+**Commit:** `b2701d2` — `feat(api): expose bulk-resolve-decisions REST endpoint`
+
+- `src/designdoc_mcp/web.py` — 新增 `POST /api/sessions/{id}/bulk-resolve-decisions`，接收 strategy/preview，返回 resolved/skipped
+- `tests/test_api_e2e.py` — 新增 3 个 E2E 测试（正常流程、404、preview vs apply）
+
+### Loop 3 — MCP tool exposure
+**Commit:** `db9285c` — `feat(mcp): expose bulk_resolve_decision_points tool`
+
+- `src/designdoc_mcp/server.py` — 注册 MCP tool `bulk_resolve_decision_points`，参数与 REST 对齐
+- `tests/test_server.py` — 新增 2 个 server 测试（正常调用、preview 模式）
+
+### Key finding during implementation
+`support_count` 不持久化在 `DecisionOption` 模型中，而是在 `_merge_decision_points` 时动态计算并写入 `Session.metadata`，避免模型变更与序列化兼容性风险。旧 session 无 metadata 时回退到选择第一个选项。
 
 ---
 
@@ -83,11 +112,11 @@ The resource previously returned human-readable plain text. Specification declar
 ## Session Context
 
 - **Project**: DesignDoc MCP (designdoc-mcp v0.3.0)
-- **Phase**: scenario_expansion (external validation + docs sync complete)
+- **Phase**: capability_expansion (Phase A complete)
 - **Branch**: master
-- **Workspace**: clean (1 untracked file: deferred-improvements.txt)
-- **Protocol State**: v2 runtime active, all planned loops complete
-- **Current Focus**: Documentation reality aligned with code. Awaiting next phase direction.
+- **Workspace**: clean
+- **Protocol State**: v2 runtime active, Phase A all loops complete
+- **Current Focus**: Phase A Bulk Human Decision fully implemented. Awaiting next phase direction.
 
 ## Completed Work
 
@@ -137,6 +166,14 @@ The resource previously returned human-readable plain text. Specification declar
 | 2 | Session event timeline API | Done (83 tests) |
 | 3 | Decision points REST exposure | Done (86 tests) |
 | 4 | MCP active-session resource JSON | Done (89 tests) |
+
+### Phase A — Bulk Human Decision (Complete)
+
+| Loop | Task | Status |
+|------|------|--------|
+| 1 | Engine bulk resolve with dynamic support counting | Done (94 tests) |
+| 2 | REST endpoint exposure | Done (97 tests) |
+| 3 | MCP tool exposure | Done (99 tests) |
 
 ### History Rewrite
 - **Action**: Removed `deferred-improvements.txt` from all Git history via `git filter-branch`
