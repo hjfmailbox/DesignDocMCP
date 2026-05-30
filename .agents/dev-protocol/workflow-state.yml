@@ -9,13 +9,13 @@ project:
   framework: FastMCP + FastAPI
 
 state:
-  current_phase: scenario_expansion
+  current_phase: capability_expansion
   current_focus: all_loops_complete_awaiting_next_phase
   active_work: awaiting_user_direction_for_next_phase
   blockers: none_detected
   last_activity:
-    commit: "ed132535559f98799f7a2d5769317d972087ed26"
-    message: "feat(export): add JSON design document generation"
+    commit: "93d27f131ae67b6ff7664c36966d327b1cb50f19"
+    message: "feat(mcp): return structured JSON from active-session resource"
     date: "2026-05-30"
 
 version_tracking:
@@ -47,14 +47,18 @@ version_tracking:
     - loop_3_delta_hierarchy_api
     - loop_4_e2e_coverage_expansion
     - loop_5_json_export
+    - loop_1_document_quality_assertions
+    - loop_2_event_timeline_api
+    - loop_3_decision_points_rest
+    - loop_4_active_session_resource
   in_progress: []
   pending:
     - user_direction_for_next_phase
 
 checkpoint:
-  last_commit: "ed132535559f98799f7a2d5769317d972087ed26"
+  last_commit: "93d27f131ae67b6ff7664c36966d327b1cb50f19"
   last_updated: "2026-05-30"
-  summary: "All 5 loops complete. 78 tests passing. Deferred improvements D2/D3/D5/D8/D10 resolved. Next: user direction for next phase."
+  summary: "All 4 product-value loops complete. 89 tests passing. Document quality, event timeline, decision points REST, and active-session resource implemented."
 
 git:
   branch: master
