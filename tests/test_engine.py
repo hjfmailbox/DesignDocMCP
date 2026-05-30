@@ -855,6 +855,28 @@ class TestRevertToEvent:
         assert session.devils_advocate_agent == ""
         assert session.novelty_scores == []
 
+    def test_revert_truncates_deltas(self, engine):
+        """回退后 requirement_deltas 按 created_at 截断"""
+        session = engine.create_session(title="Revert Deltas Test", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+
+        session = engine.store.get_session(sid)
+        target_event = session.events[-1]
+
+        engine.add_requirement_delta(sid, delta_statement="Add auth")
+        engine.add_requirement_delta(sid, delta_statement="Add OAuth")
+
+        session = engine.store.get_session(sid)
+        deltas_before = len(session.requirement_deltas)
+        assert deltas_before == 2
+
+        engine.revert_to_event(sid, target_event.event_id)
+
+        session = engine.store.get_session(sid)
+        assert len(session.requirement_deltas) == 0
+        assert all(d.created_at <= target_event.created_at for d in session.requirement_deltas)
+
     def test_revert_to_missing_event_raises(self, engine):
         """回退到不存在的 event 应该抛出 ValueError"""
         session = engine.create_session(title="Revert Error Test", description="Test")

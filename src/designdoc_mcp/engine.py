@@ -1352,6 +1352,7 @@ class CollaborationEngine:
         session.devils_advocates = [d for d in session.devils_advocates if d.created_at <= target_time]
         session.consensus_votes = [v for v in session.consensus_votes if v.created_at <= target_time]
         session.pending_questions = [q for q in session.pending_questions if q.created_at <= target_time]
+        session.requirement_deltas = [d for d in session.requirement_deltas if d.created_at <= target_time]
 
         # Clear derived state that can be regenerated
         session.merged_assumptions = []
