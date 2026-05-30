@@ -370,6 +370,15 @@ async def resolve_decision_point_api(session_id: str, request: Request, _auth=De
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@web_app.get("/api/sessions/{session_id}/decision-points")
+async def get_decision_points_api(session_id: str):
+    store = _get_store()
+    session = store.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return [dp.model_dump() for dp in session.decision_points]
+
+
 @web_app.delete("/api/sessions/{session_id}")
 async def delete_session_api(session_id: str, _auth=Depends(_verify_token)):
     store = _get_store()

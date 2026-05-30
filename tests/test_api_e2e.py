@@ -269,6 +269,64 @@ class TestAgentHeartbeat:
         assert alpha["last_active_ago"] == "just now"
 
 
+class TestDecisionPointsApi:
+    def test_get_decision_points_returns_list(self, api_client):
+        """GET /decision-points 返回 session 的决策点列表"""
+        from designdoc_mcp.models import DebatePhase
+        from designdoc_mcp.server import _get_engine
+
+        resp = api_client.post("/api/sessions/create", json={"title": "DP Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        engine = _get_engine()
+        engine.register_agent(sid, name="agent_a")
+
+        session = engine._get(sid)
+        session.current_phase = DebatePhase.CRITIC
+        engine.store._save(session)
+
+        engine.submit_decision_points(
+            sid,
+            "agent_a",
+            [
+                {
+                    "decision_id": "dp1",
+                    "topic": "Database",
+                    "description": "Choose database",
+                    "options": [
+                        {"option_id": "opt1", "label": "PostgreSQL", "proposed_by": "agent_a"},
+                        {"option_id": "opt2", "label": "MySQL", "proposed_by": "agent_a"},
+                    ],
+                    "constraints": [],
+                }
+            ],
+        )
+
+        resp = api_client.get(f"/api/sessions/{sid}/decision-points")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["topic"] == "Database"
+        assert "options" in data[0]
+        assert "human_choice" in data[0]
+
+    def test_get_decision_points_empty_when_none(self, api_client):
+        """无 decision_points 时返回空列表"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Empty DP", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.get(f"/api/sessions/{sid}/decision-points")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_get_decision_points_invalid_session_404(self, api_client):
+        """无效 session 返回 404"""
+        resp = api_client.get("/api/sessions/nonexistent/decision-points")
+        assert resp.status_code == 404
+        assert "detail" in resp.json()
+
+
 class TestDebatePhaseTransitions:
     def test_force_skip_clarification_advances_phase(self, api_client):
         """force-skip-clarification 将 phase 从 CREATED 推进到 PROPOSAL"""

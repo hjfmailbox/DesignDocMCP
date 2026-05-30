@@ -56,7 +56,7 @@
 
 ## Loop 3 — Decision points REST exposure
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2（完善 v2.0 按分歧点决策功能的外部可访问性）
 
 **Goal:** 在 Web API 新增 `GET /api/sessions/{id}/decision-points` 端点，暴露当前 session 的决策分歧列表、选项和人类选择状态，使外部工具和人类审核者可直接查看待决策项。
