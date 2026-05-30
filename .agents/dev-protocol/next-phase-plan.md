@@ -53,7 +53,7 @@
 
 ## Loop 3 — Render event timeline in frontend
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2
 
 **Goal:** 在 Flow 标签页（或独立区域）使用现有 `.timeline-item` CSS 渲染 `event_timeline` 数据，显示 session 的阶段转换历史。
