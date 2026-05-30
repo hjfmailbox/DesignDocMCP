@@ -37,7 +37,7 @@
 
 ## Loop 2 — Session event timeline API
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1（可观测性基础设施，支撑前端可视化）
 
 **Goal:** 扩展 `get_session_flow()` 返回结构，新增 `event_timeline` 字段，按时间顺序暴露阶段转换事件，使前端可绘制辩论流程时间线。

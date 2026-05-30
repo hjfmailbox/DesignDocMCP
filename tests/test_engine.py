@@ -979,6 +979,40 @@ class TestRequirementDeltaHierarchy:
         assert flow["requirement_deltas"][1]["parent_delta_id"] == parent_id
 
 
+class TestSessionEventTimeline:
+    def test_timeline_empty_for_new_session(self, engine):
+        session = engine.create_session(title="Timeline Test", description="Test")
+        sid = session.session_id
+        flow = engine.get_session_flow(sid)
+        assert flow["event_timeline"] == []
+
+    def test_timeline_contains_phase_transitions(self, engine):
+        session = engine.create_session(title="Timeline Test", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.register_agent(sid, name="agent_a")
+        engine.start_clarification(sid)
+
+        flow = engine.get_session_flow(sid)
+        timeline = flow["event_timeline"]
+        assert len(timeline) >= 1
+        assert timeline[0]["from_phase"] == "created"
+        assert timeline[0]["to_phase"] == "clarify_identify"
+        assert "timestamp" in timeline[0]
+
+    def test_timeline_sorted_by_time(self, engine):
+        session = engine.create_session(title="Timeline Test", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.register_agent(sid, name="agent_a")
+        engine.start_clarification(sid)
+
+        flow = engine.get_session_flow(sid)
+        timeline = flow["event_timeline"]
+        timestamps = [t["timestamp"] for t in timeline]
+        assert timestamps == sorted(timestamps)
+
+
 class TestCompareSessions:
     def test_compare_sessions_basic(self, engine):
         session_a = engine.create_session(title="Session A", description="Test A")

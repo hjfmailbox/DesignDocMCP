@@ -1440,6 +1440,18 @@ class CollaborationEngine:
                 },
             })
 
+        event_timeline = []
+        prev_phase = DebatePhase.CREATED.value
+        for event in session.events:
+            curr_phase = event.phase.value
+            if curr_phase != prev_phase:
+                event_timeline.append({
+                    "from_phase": prev_phase,
+                    "to_phase": curr_phase,
+                    "timestamp": event.created_at,
+                })
+                prev_phase = curr_phase
+
         return {
             "session_id": session.session_id,
             "title": session.title,
@@ -1463,6 +1475,7 @@ class CollaborationEngine:
                 }
                 for d in session.requirement_deltas
             ],
+            "event_timeline": event_timeline,
         }
 
     def get_session_summary(self, session_id: str) -> dict:
