@@ -383,6 +383,28 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
 
 <div x-show="tab==='flow'">
   <div class="timeline-item" x-data="{open:true}">
+    <div class="timeline-dot"><i class="fas fa-clock text-white" style="font-size:8px"></i></div>
+    <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
+      <span class="font-semibold text-sm">Phase Transitions</span>
+      <span class="badge b-ph text-xs" x-text="(s.event_timeline||[]).length+' transitions'"></span>
+      <i class="fas text-xs" :class="open?'fa-chevron-down':'fa-chevron-right'" style="color:var(--t3)"></i>
+    </div>
+    <div x-show="open" x-transition class="mt-2 space-y-1">
+      <template x-for="t in (s.event_timeline||[])" :key="t.timestamp">
+        <div class="flex items-center gap-2 p-2" style="background:var(--bg3);border-radius:6px">
+          <span class="badge b-ph text-xs" x-text="t.from_phase"></span>
+          <i class="fas fa-arrow-right text-xs" style="color:var(--t3)"></i>
+          <span class="badge b-ac text-xs" x-text="t.to_phase"></span>
+          <span class="text-xs ml-auto" style="color:var(--t3)" x-text="evtTimeAgo(t.timestamp)"></span>
+        </div>
+      </template>
+      <div x-show="!(s.event_timeline||[]).length" class="text-center py-3" style="color:var(--t3)">
+        <p class="text-sm">No phase transitions yet</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline-item" x-data="{open:true}">
     <div class="timeline-dot td-ac"><i class="fas fa-lightbulb text-white" style="font-size:8px"></i></div>
     <div class="expandable flex items-center gap-2 py-1 px-2" @click="open=!open">
       <span class="font-semibold text-sm">Proposals</span>
