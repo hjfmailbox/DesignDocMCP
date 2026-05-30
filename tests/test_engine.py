@@ -946,7 +946,37 @@ class TestRequirementDeltaHierarchy:
         with pytest.raises(ValueError, match=f"Parent delta '{parent_id}' not found"):
             engine.add_requirement_delta(sid_b, delta_statement="Add auth", parent_delta_id=parent_id)
 
+    def test_deltas_exposed_in_session_summary(self, engine):
+        """get_session_summary 暴露 requirement_deltas 层次信息"""
+        session = engine.create_session(title="Delta Summary", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
 
+        parent = engine.add_requirement_delta(sid, delta_statement="Add auth")
+        parent_id = parent["delta_id"]
+        engine.add_requirement_delta(sid, delta_statement="Add OAuth", parent_delta_id=parent_id)
+
+        summary = engine.get_session_summary(sid)
+        assert summary["requirement_deltas_count"] == 2
+        assert len(summary["requirement_deltas"]) == 2
+        assert summary["requirement_deltas"][0]["delta_id"] == parent_id
+        assert summary["requirement_deltas"][1]["parent_delta_id"] == parent_id
+
+    def test_deltas_exposed_in_session_flow(self, engine):
+        """get_session_flow 暴露 requirement_deltas 层次信息"""
+        session = engine.create_session(title="Delta Flow", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+
+        parent = engine.add_requirement_delta(sid, delta_statement="Add auth")
+        parent_id = parent["delta_id"]
+        engine.add_requirement_delta(sid, delta_statement="Add OAuth", parent_delta_id=parent_id)
+
+        flow = engine.get_session_flow(sid)
+        assert flow["requirement_deltas_count"] == 2
+        assert len(flow["requirement_deltas"]) == 2
+        assert flow["requirement_deltas"][0]["delta_id"] == parent_id
+        assert flow["requirement_deltas"][1]["parent_delta_id"] == parent_id
 
 
 class TestCompareSessions:

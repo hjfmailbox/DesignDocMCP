@@ -1453,6 +1453,16 @@ class CollaborationEngine:
             "round_summaries": round_summaries,
             "total_events": len(session.events),
             "unresolved_questions": len([q for q in session.pending_questions if not q.resolved]),
+            "requirement_deltas_count": len(session.requirement_deltas),
+            "requirement_deltas": [
+                {
+                    "delta_id": d.delta_id,
+                    "parent_delta_id": d.parent_delta_id,
+                    "problem_statement": d.problem_statement,
+                    "created_at": d.created_at,
+                }
+                for d in session.requirement_deltas
+            ],
         }
 
     def get_session_summary(self, session_id: str) -> dict:
@@ -1483,6 +1493,16 @@ class CollaborationEngine:
             "total_events": len(session.events),
             "devils_advocate_agent": session.devils_advocate_agent,
             "novelty_scores": session.novelty_scores[-3:] if session.novelty_scores else [],
+            "requirement_deltas_count": len(session.requirement_deltas),
+            "requirement_deltas": [
+                {
+                    "delta_id": d.delta_id,
+                    "parent_delta_id": d.parent_delta_id,
+                    "problem_statement": d.problem_statement,
+                    "created_at": d.created_at,
+                }
+                for d in session.requirement_deltas
+            ],
         }
 
     def get_phase_context(self, session_id: str, agent_id: str) -> dict:
