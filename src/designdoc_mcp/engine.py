@@ -930,7 +930,8 @@ class CollaborationEngine:
         return {"action": "submitted", "count": len(added), "decision_ids": added}
 
     def _merge_decision_points(self, session: Session) -> None:
-        """Merge decision points by topic. Same-topic points get their options combined."""
+        """Merge decision points by topic. Same-topic points get their options combined.
+        Tracks per-option agent support counts in session.metadata."""
         by_topic: dict[str, list[DecisionPoint]] = {}
         for dp in session.decision_points:
             key = dp.topic.lower().strip()
@@ -939,13 +940,19 @@ class CollaborationEngine:
             by_topic[key].append(dp)
 
         merged = []
+        support_meta: dict[str, dict[str, int]] = {}
         for topic, dps in by_topic.items():
             if len(dps) == 1:
                 merged.append(dps[0])
+                # Preserve existing support counts for unmerged points
+                existing_counts = session.metadata.get("decision_point_supports", {}).get(dps[0].decision_id, {})
+                if existing_counts:
+                    support_meta[dps[0].decision_id] = existing_counts
                 continue
             # Merge options from all DPs with the same topic
             all_options = []
             seen_labels: dict[str, DecisionOption] = {}
+            option_counts: dict[str, int] = {}
             for dp in dps:
                 for opt in dp.options:
                     label_key = opt.label.lower().strip()
@@ -956,14 +963,17 @@ class CollaborationEngine:
                             existing.reasoning += f" | {opt.proposed_by}: {opt.reasoning}"
                         existing.pros = list(set(existing.pros + opt.pros))
                         existing.cons = list(set(existing.cons + opt.cons))
+                        option_counts[existing.option_id] += 1
                     else:
-                        seen_labels[label_key] = opt.model_copy()
-                        all_options.append(seen_labels[label_key])
+                        copied = opt.model_copy()
+                        seen_labels[label_key] = copied
+                        all_options.append(copied)
+                        option_counts[copied.option_id] = 1
 
             all_constraints = list(set(c for dp in dps for c in dp.constraints))
             best_desc = max(dps, key=lambda d: len(d.description)).description
 
-            merged.append(DecisionPoint(
+            merged_dp = DecisionPoint(
                 decision_id=dps[0].decision_id,
                 topic=dps[0].topic,
                 description=best_desc,
@@ -971,9 +981,14 @@ class CollaborationEngine:
                 constraints=all_constraints,
                 human_choice=dps[0].human_choice,
                 human_custom=dps[0].human_custom,
-            ))
+            )
+            merged.append(merged_dp)
+            support_meta[merged_dp.decision_id] = option_counts
 
         session.decision_points = merged
+        if support_meta:
+            session.metadata.setdefault("decision_point_supports", {})
+            session.metadata["decision_point_supports"].update(support_meta)
 
     def resolve_decision_point(
         self,
@@ -1007,6 +1022,77 @@ class CollaborationEngine:
         self.store.update_session(session)
         logger.info("resolve_decision_point: %s resolved with %s", decision_id, choice or "custom")
         return {"action": "resolved", "decision_id": decision_id, "choice": dp.human_choice}
+
+    def bulk_resolve_decision_points(
+        self,
+        session_id: str,
+        strategy: str = "majority",
+        preview: bool = False,
+    ) -> dict:
+        """Resolve all unresolved decision points in bulk using a given strategy.
+
+        Args:
+            session_id: The session identifier.
+            strategy: Resolution strategy. Only "majority" is supported.
+            preview: If True, returns what would be chosen without modifying session.
+
+        Returns:
+            dict with keys: resolved, skipped, preview
+        """
+        session = self._get(session_id)
+        unresolved = [dp for dp in session.decision_points if not dp.human_choice]
+
+        resolved: list[dict] = []
+        skipped: list[dict] = []
+        support_meta = session.metadata.get("decision_point_supports", {})
+
+        for dp in unresolved:
+            if not dp.options:
+                skipped.append({"decision_id": dp.decision_id, "topic": dp.topic, "reason": "no_options"})
+                continue
+
+            if strategy != "majority":
+                skipped.append({"decision_id": dp.decision_id, "topic": dp.topic, "reason": f"unknown_strategy:{strategy}"})
+                continue
+
+            counts = support_meta.get(dp.decision_id, {})
+            best_option = None
+            best_count = -1
+
+            for opt in dp.options:
+                count = counts.get(opt.option_id, 1)
+                if count > best_count:
+                    best_count = count
+                    best_option = opt
+
+            if best_option is None:
+                skipped.append({"decision_id": dp.decision_id, "topic": dp.topic, "reason": "no_best_option"})
+                continue
+
+            fallback = dp.decision_id not in support_meta
+
+            if not preview:
+                dp.human_choice = best_option.option_id
+                self._add_event(
+                    session,
+                    EventType.HUMAN_DECISION,
+                    "human",
+                    content=f"Decision '{dp.topic}': {best_option.option_id} (bulk majority)",
+                )
+
+            resolved.append({
+                "decision_id": dp.decision_id,
+                "topic": dp.topic,
+                "chosen_option_id": best_option.option_id,
+                "chosen_label": best_option.label,
+                "support_count": best_count,
+                "fallback": fallback,
+            })
+
+        if not preview:
+            self.store.update_session(session)
+
+        return {"resolved": resolved, "skipped": skipped, "preview": preview}
 
     def submit_optimization(
         self,

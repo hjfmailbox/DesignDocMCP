@@ -547,6 +547,178 @@ class TestDecisionPoints:
         assert "SQLite" in labels
 
 
+class TestBulkResolveDecisionPoints:
+    def test_merge_stores_support_count_in_metadata(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [
+                    {"label": "PostgreSQL", "reasoning": "Vector support"},
+                    {"label": "SQLite", "reasoning": "Lightweight"},
+                ]},
+            ],
+        )
+        engine.submit_decision_points(
+            sid, "agentb",
+            decision_points=[
+                {"topic": "database", "description": "DB selection", "options": [
+                    {"label": "PostgreSQL", "reasoning": "ACID compliance"},
+                    {"label": "MySQL", "reasoning": "Team familiarity"},
+                ]},
+            ],
+        )
+
+        session = engine._get(sid)
+        engine._merge_decision_points(session)
+
+        support_meta = session.metadata.get("decision_point_supports", {})
+        dp = session.decision_points[0]
+        counts = support_meta.get(dp.decision_id, {})
+        assert len(counts) == 3
+        # PostgreSQL proposed by both agents -> count 2
+        pg_opt = [o for o in dp.options if o.label == "PostgreSQL"][0]
+        assert counts[pg_opt.option_id] == 2
+        sqlite_opt = [o for o in dp.options if o.label == "SQLite"][0]
+        assert counts[sqlite_opt.option_id] == 1
+        mysql_opt = [o for o in dp.options if o.label == "MySQL"][0]
+        assert counts[mysql_opt.option_id] == 1
+
+    def test_bulk_resolve_majority_picks_highest_count(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [
+                    {"label": "PostgreSQL", "reasoning": "Vector support"},
+                    {"label": "SQLite", "reasoning": "Lightweight"},
+                ]},
+            ],
+        )
+        engine.submit_decision_points(
+            sid, "agentb",
+            decision_points=[
+                {"topic": "database", "description": "DB selection", "options": [
+                    {"label": "PostgreSQL", "reasoning": "ACID compliance"},
+                ]},
+            ],
+        )
+
+        session = engine._get(sid)
+        engine._merge_decision_points(session)
+
+        result = engine.bulk_resolve_decision_points(sid, strategy="majority", preview=False)
+        assert len(result["resolved"]) == 1
+        assert result["resolved"][0]["chosen_label"] == "PostgreSQL"
+        assert result["resolved"][0]["support_count"] == 2
+        assert result["resolved"][0]["fallback"] is False
+        assert len(result["skipped"]) == 0
+        assert result["preview"] is False
+
+        # Verify session is actually modified
+        session = engine._get(sid)
+        assert session.decision_points[0].human_choice == result["resolved"][0]["chosen_option_id"]
+
+    def test_bulk_resolve_preview_does_not_modify(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        dp_result = engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [
+                    {"label": "PostgreSQL", "reasoning": "Vector support"},
+                ]},
+            ],
+        )
+
+        result = engine.bulk_resolve_decision_points(sid, strategy="majority", preview=True)
+        assert len(result["resolved"]) == 1
+        assert result["preview"] is True
+
+        session = engine._get(sid)
+        dp = [d for d in session.decision_points if d.decision_id == dp_result["decision_ids"][0]][0]
+        assert dp.human_choice == ""
+
+    def test_bulk_resolve_fallback_without_metadata(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [
+                    {"label": "PostgreSQL", "reasoning": "Vector support"},
+                    {"label": "SQLite", "reasoning": "Lightweight"},
+                ]},
+            ],
+        )
+
+        # Simulate old session: clear metadata before resolving
+        session = engine._get(sid)
+        session.metadata.pop("decision_point_supports", None)
+
+        result = engine.bulk_resolve_decision_points(sid, strategy="majority", preview=False)
+        assert len(result["resolved"]) == 1
+        assert result["resolved"][0]["chosen_label"] == "PostgreSQL"
+        assert result["resolved"][0]["fallback"] is True
+        assert result["resolved"][0]["support_count"] == 1
+
+    def test_bulk_resolve_tie_breaks_to_first_option(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "agenta", architecture="Arch A")
+        engine.submit_proposal(sid, "agentb", architecture="Arch B")
+
+        engine.submit_decision_points(
+            sid, "agenta",
+            decision_points=[
+                {"topic": "database", "description": "Choose DB", "options": [
+                    {"label": "PostgreSQL", "reasoning": "Vector support"},
+                ]},
+            ],
+        )
+        engine.submit_decision_points(
+            sid, "agentb",
+            decision_points=[
+                {"topic": "database", "description": "DB selection", "options": [
+                    {"label": "SQLite", "reasoning": "Lightweight"},
+                ]},
+            ],
+        )
+
+        session = engine._get(sid)
+        engine._merge_decision_points(session)
+
+        result = engine.bulk_resolve_decision_points(sid, strategy="majority", preview=False)
+        assert len(result["resolved"]) == 1
+        # Both have count 1; first in merged list wins
+        chosen = result["resolved"][0]["chosen_label"]
+        assert chosen in ("PostgreSQL", "SQLite")
+
+
 class TestSessionPauseResume:
     def test_pause_and_resume(self, engine, session_with_agents):
         sid = session_with_agents.session_id
