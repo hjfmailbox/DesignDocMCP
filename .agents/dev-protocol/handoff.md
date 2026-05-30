@@ -5,19 +5,22 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Phase A — Bulk Human Decision 全部完成。99 tests passing。等待用户定义下一阶段方向。
+Phase B — Frontend Decision-Point Enhancement + Timeline Visualization。
+Loop 1 完成（event timeline API 暴露）。101 tests passing。
+等待执行 Loop 2（前端 bulk resolve 按钮接线）。
 
 ## Next Recommended Actions
 
-1. **Generate new plan** for next phase (Phase B frontend decision-point cards, PDF export, agent health panel, or user-defined)
-2. **Run `/dev-scope`** for a specific user goal
+1. **Run `/continue-loop`** 执行 Phase B Loop 2：修复前端 `adoptMajority()` 为真实后端调用
+2. **Run `/continue-loop`** 执行 Phase B Loop 3：在前端渲染 event timeline
 3. **Review deferred-improvements.txt** for remaining P1 items if technical debt becomes blocking
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` Phase A 全部 loops completed。计划文件保留供参考。
+- `next-phase-plan.md` Phase B 计划中 Loop 1 已完成，Loop 2/3 pending。
+- `workflow-state.yml` checkpoint 已同步至 `6f4f588`。
 - `current-focus.md` and `issues.md` accurately reflect code reality.
-- No blockers. Workspace is clean. Ready for next phase.
+- No blockers. Workspace is clean. Ready for Loop 2.
 - Checkpoint 已同步至 `db9285c`（Phase A 全部 3 个 loops）。
 
 ---
