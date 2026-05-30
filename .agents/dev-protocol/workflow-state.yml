@@ -10,8 +10,8 @@ project:
 
 state:
   current_phase: capability_expansion
-  current_focus: phase_b_loop_1_complete_awaiting_loop_2
-  active_work: phase_b_frontend_decision_point_enhancement
+  current_focus: phase_b_complete_awaiting_next_phase
+  active_work: awaiting_user_direction_for_next_phase
   blockers: none_detected
   last_activity:
     commit: "6f4f5883714d46b1b6935d63f6bbce541b5901e1"
@@ -55,15 +55,16 @@ version_tracking:
     - phase_a_loop_2_rest_endpoint
     - phase_a_loop_3_mcp_tool
     - phase_b_loop_1_event_timeline_api
-  in_progress: []
-  pending:
     - phase_b_loop_2_frontend_bulk_resolve
     - phase_b_loop_3_timeline_rendering
+  in_progress: []
+  pending:
+    - user_direction_for_next_phase
 
 checkpoint:
-  last_commit: "6f4f5883714d46b1b6935d63f6bbce541b5901e1"
+  last_commit: "d44957a74d7f98851cb699b914397044fccd5ad0"
   last_updated: "2026-05-30"
-  summary: "Phase B Loop 1 complete. event_timeline exposed in session detail API. 101 tests passing. Awaiting Loop 2 frontend bulk resolve wiring."
+  summary: "Phase B complete. Frontend decision-point enhancement + timeline visualization. 101 tests passing. Awaiting next phase direction."
 
 git:
   branch: master
