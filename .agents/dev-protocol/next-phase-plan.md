@@ -36,7 +36,7 @@
 
 ## Loop 2 — Wire frontend bulk resolve to backend endpoint
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1
 
 **Goal:** 将前端 `adoptMajority()` 从 broken 的客户端逻辑替换为对 `POST /bulk-resolve-decisions` 后端端点的真实调用。
