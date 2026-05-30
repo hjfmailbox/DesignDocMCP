@@ -215,3 +215,95 @@ class TestSessionLifecycle:
         assert "status" in data
         assert "phase" in data
         assert "agents" in data
+
+
+class TestSessionPauseResumeLifecycle:
+    def test_pause_resume_cycle(self, api_client):
+        """session pause → resume 状态正确流转"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Pause Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.post(f"/api/sessions/{sid}/pause")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "paused"
+
+        resp = api_client.get(f"/api/sessions/{sid}")
+        assert resp.json()["status"] == "paused"
+
+        resp = api_client.post(f"/api/sessions/{sid}/resume")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] != "paused"
+
+        resp = api_client.get(f"/api/sessions/{sid}")
+        assert resp.json()["status"] != "paused"
+
+    def test_pause_already_paused_returns_400(self, api_client):
+        """重复 pause 返回 400"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Double Pause", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        api_client.post(f"/api/sessions/{sid}/pause")
+        resp = api_client.post(f"/api/sessions/{sid}/pause")
+        assert resp.status_code == 400
+        assert "detail" in resp.json()
+
+
+class TestAgentHeartbeat:
+    def test_heartbeat_updates_last_active(self, api_client):
+        """heartbeat 更新 agent last_active_at"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Heartbeat Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.post("/api/register-agent", json={"session_id": sid, "name": "Alpha"})
+        assert resp.status_code == 200
+        agent_id = resp.json()["agent_id"]
+
+        resp = api_client.post(f"/api/sessions/{sid}/heartbeat/{agent_id}")
+        assert resp.status_code == 200
+
+        resp = api_client.get(f"/api/sessions/{sid}")
+        agents = resp.json()["agents"]
+        alpha = next(a for a in agents if a["agent_id"] == agent_id)
+        assert alpha["last_active_ago"] == "just now"
+
+
+class TestDebatePhaseTransitions:
+    def test_force_skip_clarification_advances_phase(self, api_client):
+        """force-skip-clarification 将 phase 从 CREATED 推进到 PROPOSAL"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Skip Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.post(
+            f"/api/sessions/{sid}/submit-requirement",
+            json={"problem_statement": "Build a system"},
+        )
+        assert resp.status_code == 200
+
+        resp = api_client.post("/api/register-agent", json={"session_id": sid, "name": "Alpha"})
+        assert resp.status_code == 200
+
+        resp = api_client.post(f"/api/sessions/{sid}/start-clarification")
+        assert resp.status_code == 200
+
+        resp = api_client.post(f"/api/sessions/{sid}/force-skip-clarification")
+        assert resp.status_code == 200
+
+        resp = api_client.get(f"/api/sessions/{sid}")
+        assert resp.json()["phase"] == "proposal"
+
+    def test_start_clarification_requires_agent(self, api_client):
+        """start-clarification 在没有 agent 时返回 400"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Start Clarify", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.post(
+            f"/api/sessions/{sid}/submit-requirement",
+            json={"problem_statement": "Build a system"},
+        )
+        assert resp.status_code == 200
+
+        resp = api_client.post(f"/api/sessions/{sid}/start-clarification")
+        assert resp.status_code == 400
+        assert "detail" in resp.json()
