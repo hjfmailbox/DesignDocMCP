@@ -10,8 +10,8 @@ project:
 
 state:
   current_phase: scenario_expansion
-  current_focus: docs_sync_complete
-  active_work: awaiting_next_phase_or_user_direction
+  current_focus: loop_1_delta_truncation_complete
+  active_work: awaiting_loop_2_or_user_direction
   blockers: none_detected
   last_activity:
     commit: "f96c225f85852f1804825713973a6cc48c6ba932"
@@ -42,14 +42,18 @@ version_tracking:
     - external_validation_loop_2_html_export
     - external_validation_loop_3_multi_human_review
     - external_validation_docs_sync_loop_4_7
+    - loop_1_revert_delta_truncation
   in_progress: []
   pending:
-    - user_direction_for_next_phase
+    - loop_2_api_error_status_codes
+    - loop_3_delta_hierarchy_api
+    - loop_4_e2e_coverage_expansion
+    - loop_5_json_export
 
 checkpoint:
-  last_commit: "f96c225f85852f1804825713973a6cc48c6ba932"
+  last_commit: "32db1f12b5de20d267a4e31bf523233d494d5383"
   last_updated: "2026-05-30"
-  summary: "Documentation sync loops 4-7 complete. All 4 docs files aligned with code reality. Committed and pushed to origin/master. 66 tests passing. Roadmap drift eliminated. Awaiting next phase direction."
+  summary: "Loop 1 complete: revert_to_event now truncates requirement_deltas. 67 tests passing. Next: Loop 2 API error status codes."
 
 git:
   branch: master

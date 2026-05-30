@@ -59,16 +59,32 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-All planned work complete. Documentation reality aligned with code. 66 tests passing. Roadmap drift eliminated.
+Loop 1 of new phase complete: `revert_to_event` now truncates `requirement_deltas`. 67 tests passing. Ready for Loop 2.
 
 ## Next Recommended Actions
 
-1. Enter **v2.0 按分歧点决策** (DecisionPoint data model + Critic extension + frontend cards)
-2. Implement **PDF/DOCX export** (extend existing HTML export)
-3. Run `/dev-scope` for a user-defined goal
+1. **Loop 2** — Standardize API error HTTP status codes (200+error JSON → 404/400)
+2. **Loop 3** — Expose RequirementDelta hierarchy in session APIs
+3. **Loop 4** — Expand E2E API coverage for debate/undo flows
+4. **Loop 5** — Add JSON export format support
 
 ## Notes For Next Session
 
 - `next-phase-plan.md` all loops completed. Plan file retained for reference.
 - `current-focus.md` and `issues.md` accurately reflect code reality.
 - No blockers. Workspace is clean. Ready for next phase.
+
+---
+
+## Loop 1 — revert_to_event delta truncation (Completed 2026-05-30)
+
+**Status:** Completed
+**Commit:** `32db1f12` — `fix(undo): truncate requirement_deltas on revert_to_event`
+**Tests:** 67 passing (66 → 67)
+
+### What changed
+- `src/designdoc_mcp/engine.py:1355` — Added `requirement_deltas` truncation in `revert_to_event()`
+- `tests/test_engine.py` — Added regression test `test_revert_truncates_deltas`
+
+### Key finding during implementation
+`RequirementDelta` and its corresponding `_add_event` system event share the same microsecond `created_at` because they are instantiated back-to-back in `add_requirement_delta()`. Regression test avoids time collision by capturing the target event *before* adding deltas, then reverting.
