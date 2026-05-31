@@ -14,9 +14,9 @@ state:
   active_work: phase_d_session_diagnostics_health_checks_observability
   blockers: none_detected
   last_activity:
-    commit: "73d513b4b9c0086ff6d5a1c90f0f33ca5c4ca0b8"
-    message: "feat(frontend): render session diagnostics card in detail view"
-    date: "2026-05-31"
+    commit: "8f2f2bfc77bb1f1968c95f53adb4034e599b72b6"
+    message: "chore(skills): unify agent skills to root directory with symlinks"
+    date: "2026-06-01"
 
 version_tracking:
   completed_phases:
@@ -68,18 +68,14 @@ version_tracking:
   pending: []
 
 checkpoint:
-  last_commit: "73d513b4b9c0086ff6d5a1c90f0f33ca5c4ca0b8"
-  last_updated: "2026-05-31"
-  summary: "Phase D complete. All 3 loops done: session diagnostics engine, REST API exposure, frontend diagnostics card. 126 tests passing. Ready for next phase."
+  last_commit: "8f2f2bfc77bb1f1968c95f53adb4034e599b72b6"
+  last_updated: "2026-06-01"
+  summary: "Skills unification complete. Agent skills migrated to root skills/ via symlinks. Git tracking fixed (.gitignore). Phase D remains complete (126 tests). Workspace clean."
 
 git:
   branch: master
   base_branch: master
-  untracked_files:
-    - deferred-improvements.txt
-    - .agents/dev-protocol/runtime-telemetry/
-    - .agents/skills/
-    - .claude/skills/
+  untracked_files: []
   unstaged_changes: 0
   staged_changes: 0
   modified_files: []
