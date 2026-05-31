@@ -63,7 +63,7 @@
 
 ## Loop 2 — Expose diagnostics via REST API
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1
 
 **Goal:** 添加 `GET /api/sessions/{id}/diagnostics` 和 `GET /api/sessions/stalled` 端点，将 Loop 1 的诊断能力暴露给客户端。
