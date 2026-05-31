@@ -1421,7 +1421,7 @@ class CollaborationEngine:
                 if "waiting for human approval" in content or "moved to human review" in content or "escalated to human review" in content:
                     session.status = SessionStatus.HUMAN_REVIEW
                     break
-                if "Consensus reached" in content or "Full consensus" in content:
+                if "Consensus reached" in content or "Full consensus" in content or "Human review completed" in content:
                     session.status = SessionStatus.COMPLETED
                     break
                 if "Auto-advanced" in content:
