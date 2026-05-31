@@ -19,7 +19,7 @@
 
 ## Loop 1 — Implement session diagnostics engine
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1
 
 **Goal:** 在 `engine.py` 中添加 `get_session_diagnostics(session_id)` 方法，返回结构化诊断对象（health_score 0–100、stall_status、data_consistency、warnings 列表），利用 Phase C 的 replay 基础设施检测异常。
