@@ -37,7 +37,7 @@
 
 ## Loop 2 — Replace revert_to_event with replay-based undo
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1
 
 **Goal:** 重写 `revert_to_event()`：截断 events 到目标点后，调用 Loop 1 的 builder 重建完整状态，移除所有手动 list truncation（assumptions/proposals/votes 等按 created_at 过滤）和启发式 status inference。
