@@ -104,6 +104,12 @@ async def list_sessions(limit: int = 0, offset: int = 0, status: str | None = No
     return {"total": total, "limit": limit, "offset": offset, "sessions": result}
 
 
+@web_app.get("/api/sessions/stalled")
+async def list_stalled_sessions_api():
+    engine = _get_engine()
+    return {"stalled_sessions": engine.list_stalled_sessions()}
+
+
 @web_app.get("/api/sessions/{session_id}")
 async def get_session_detail(session_id: str):
     store = _get_store()
@@ -111,6 +117,15 @@ async def get_session_detail(session_id: str):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return _serialize_session(session)
+
+
+@web_app.get("/api/sessions/{session_id}/diagnostics")
+async def get_session_diagnostics_api(session_id: str):
+    engine = _get_engine()
+    try:
+        return engine.get_session_diagnostics(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @web_app.get("/api/sessions/{session_id}/events")

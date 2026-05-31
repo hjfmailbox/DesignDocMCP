@@ -2416,6 +2416,43 @@ class CollaborationEngine:
             "workflow_progress": workflow_progress,
         }
 
+    def list_stalled_sessions(self) -> list[dict[str, Any]]:
+        """Return summary info for all stalled sessions.
+
+        Uses store.list_sessions directly (not _get) to avoid consistency-
+        validation warning logs and unnecessary per-session replay overhead.
+        Only computes full diagnostics for sessions that appear stalled by
+        updated_at threshold.
+        """
+        sessions = self.store.list_sessions()
+        stalled: list[dict[str, Any]] = []
+        now = datetime.now(timezone.utc)
+        for session in sessions:
+            if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
+                continue
+            try:
+                updated_at = datetime.fromisoformat(session.updated_at)
+                seconds_since = int((now - updated_at).total_seconds())
+            except (ValueError, TypeError):
+                continue
+            if seconds_since <= 300:
+                continue
+            # Suspicious — compute full diagnostics to confirm
+            try:
+                diag = self.get_session_diagnostics(session.session_id)
+            except ValueError:
+                continue
+            if diag["stall_status"]["is_stalled"]:
+                stalled.append({
+                    "session_id": session.session_id,
+                    "title": session.title,
+                    "status": session.status.value,
+                    "phase": session.current_phase.value,
+                    "seconds_stalled": diag["stall_status"]["seconds_since_activity"],
+                    "health_score": diag["health_score"],
+                })
+        return stalled
+
     def _get(self, session_id: str) -> Session:
         session = self.store.get_session(session_id)
         if session is None:

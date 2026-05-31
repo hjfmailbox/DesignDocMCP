@@ -1,6 +1,9 @@
 """E2E API tests: HTTP → FastAPI/Web → engine → persistence → response"""
 from __future__ import annotations
 
+import json as _json
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -520,3 +523,72 @@ class TestSessionEventTimeline:
         assert timeline[0]["from_phase"] == "created"
         assert timeline[0]["to_phase"] == "clarify_identify"
         assert "timestamp" in timeline[0]
+
+
+class TestSessionDiagnosticsApi:
+    """Loop 2 — Diagnostics REST API E2E tests."""
+
+    def test_diagnostics_returns_correct_structure(self, api_client):
+        """/diagnostics 返回正确的 JSON 结构。"""
+        resp = api_client.post("/api/sessions/create", json={"title": "Diag API", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        resp = api_client.get(f"/api/sessions/{sid}/diagnostics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "health_score" in data
+        assert "stall_status" in data
+        assert "data_consistency" in data
+        assert "warnings" in data
+        assert "workflow_progress" in data
+        assert isinstance(data["health_score"], int)
+        assert 0 <= data["health_score"] <= 100
+        assert "is_stalled" in data["stall_status"]
+
+    def test_diagnostics_404_for_missing_session(self, api_client):
+        """不存在的 session 返回 404。"""
+        resp = api_client.get("/api/sessions/nonexistent/diagnostics")
+        assert resp.status_code == 404
+
+    def test_stalled_returns_matching_sessions(self, api_client):
+        """/stalled 只返回符合条件的 stalled session。"""
+        import designdoc_mcp.web as web_module
+
+        resp = api_client.post("/api/sessions/create", json={"title": "Stall Test", "description": "Test"})
+        sid = resp.json()["session_id"]
+
+        # 注册 agent 并提交 requirement
+        resp = api_client.post("/api/register-agent", json={"session_id": sid, "name": "Alpha"})
+        assert resp.status_code == 200
+        resp = api_client.post(
+            f"/api/sessions/{sid}/submit-requirement",
+            json={"problem_statement": "Test"},
+        )
+        assert resp.status_code == 200
+
+        # 通过修改 store JSON 文件将 updated_at 设为 400 秒前
+        store = web_module._get_store()
+        path = store._session_path(sid)
+        data = _json.loads(path.read_text(encoding="utf-8"))
+        stale_time = (datetime.now(timezone.utc) - timedelta(seconds=400)).isoformat()
+        data["updated_at"] = stale_time
+        path.write_text(_json.dumps(data), encoding="utf-8")
+        store._sessions.pop(sid, None)
+        store._mtimes.pop(sid, None)
+
+        resp = api_client.get("/api/sessions/stalled")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert "stalled_sessions" in result
+        stalled = result["stalled_sessions"]
+        assert len(stalled) >= 1
+        assert any(s["session_id"] == sid for s in stalled)
+        assert "health_score" in stalled[0]
+        assert "seconds_stalled" in stalled[0]
+
+    def test_stalled_returns_empty_when_none(self, api_client):
+        """无 stalled session 时 /stalled 返回空列表。"""
+        resp = api_client.get("/api/sessions/stalled")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["stalled_sessions"] == []
