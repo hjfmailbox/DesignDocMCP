@@ -6,19 +6,18 @@ Last updated by /dev-save on 2026-05-30.
 ## Current Focus
 
 Phase C — Deterministic Session Replay Engine。
-Loop 1 完成（`_rebuild_derived_state()` builder 实现）。104 tests passing。
-等待执行 Loop 2（替换 `revert_to_event()` 为 replay-based reconstruction）。
+Loop 2 完成（`revert_to_event()` 替换为 replay-based reconstruction）。104 tests passing。
+等待执行 Loop 3（验证 restart recovery with replay）。
 
 ## Next Recommended Actions
 
-1. **Run `/continue-loop`** 执行 Phase C Loop 2：替换 `revert_to_event()` 为 replay-based reconstruction
-2. **Run `/continue-loop`** 执行 Phase C Loop 3：验证 restart recovery
-3. **Run `/continue-loop`** 执行 Phase C Loop 4：replay determinism regression tests
+1. **Run `/continue-loop`** 执行 Phase C Loop 3：验证 restart recovery with replay
+2. **Run `/continue-loop`** 执行 Phase C Loop 4：replay determinism regression tests
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` Phase C 计划中 Loop 1 已完成，Loop 2/3/4 pending。
-- `workflow-state.yml` checkpoint 已同步至 `4f8e9ba`。
+- `next-phase-plan.md` Phase C 计划中 Loop 1-2 已完成，Loop 3/4 pending。
+- `workflow-state.yml` checkpoint 已同步至 `7e24e6e`。
 - `current-focus.md` and `issues.md` accurately reflect code reality.
 - No blockers. Workspace is clean. Ready for Loop 2.
 - `current-focus.md` and `issues.md` accurately reflect code reality.
