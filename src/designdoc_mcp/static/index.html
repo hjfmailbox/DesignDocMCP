@@ -241,6 +241,34 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
   </template>
 </div>
 
+<div x-show="diagnostics" class="card p-3 mb-4">
+  <div class="flex items-center gap-3 flex-wrap">
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-semibold" style="color:var(--t3)">Health</span>
+      <span class="badge text-sm" :class="diagnostics.health_score>=80?'b-ok':diagnostics.health_score>=50?'b-wn':'b-er'" x-text="diagnostics.health_score"></span>
+    </div>
+    <div x-show="diagnostics.stall_status&&diagnostics.stall_status.is_stalled" class="flex items-center gap-1">
+      <i class="fas fa-clock text-xs" style="color:var(--er)"></i>
+      <span class="text-xs" style="color:var(--er)">Stalled <span x-text="diagnostics.stall_status.seconds_since_activity+'s'"></span></span>
+    </div>
+    <div x-show="diagnostics.workflow_progress" class="flex items-center gap-1">
+      <span class="text-xs" style="color:var(--t3)">Phase:</span>
+      <span class="text-xs" style="color:var(--t2)" x-text="diagnostics.workflow_progress.current_phase"></span>
+    </div>
+  </div>
+  <div x-show="diagnostics.warnings&&diagnostics.warnings.length" class="mt-2 space-y-1">
+    <template x-for="w in diagnostics.warnings" :key="w.category+w.message">
+      <div class="flex items-start gap-2 text-xs p-1.5" style="background:var(--bg3);border-radius:4px">
+        <i class="fas fa-exclamation-triangle mt-0.5" style="color:var(--wn)"></i>
+        <div>
+          <span class="font-medium" style="color:var(--wn)" x-text="w.category"></span>
+          <span style="color:var(--t2)" x-text="w.message"></span>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+
 <div class="flex gap-1 mb-4" style="border-bottom:1px solid var(--bd)">
   <button @click="tab='agents'" class="tab" :class="tab==='agents'?'on':''"><i class="fas fa-robot mr-1"></i>Agents</button>
   <button @click="tab='activity'" class="tab" :class="tab==='activity'?'on':''">
@@ -789,7 +817,7 @@ function app(){
   return {
     theme:localStorage.getItem('dd-theme')||'midnight',
     sessions:[],sid:null,s:null,tab:'agents',
-    sseOn:false,sseSrc:null,docContent:'',
+    sseOn:false,sseSrc:null,docContent:'',diagnostics:null,
     notif:{show:false,type:'info',title:'',message:''},
     showModal:false,modal:{title:'',message:'',actions:[]},
     soundOn:localStorage.getItem('dd-sound')!=='false',
@@ -848,7 +876,7 @@ function app(){
     },
     setTheme(t){this.theme=t;document.documentElement.setAttribute('data-theme',t);localStorage.setItem('dd-theme',t)},
     async loadSessions(){
-      try{const r=await fetch('/api/sessions');this.sessions=await r.json();
+      try{const r=await fetch('/api/sessions');const data=await r.json();this.sessions=data.sessions||data;
         if(this.sid)await this.loadDetail(this.sid);
         else if(!this.sid){
           const active=this.sessions.filter(s=>s.status!=='archived'&&s.status!=='completed');
@@ -856,11 +884,15 @@ function app(){
         }
       }catch(e){console.error(e)}
     },
-    async selectSession(id){this.sid=id;this.tab='agents';this.docContent='';this.liveEvents=[];await this.loadDetail(id);this.connectSSE(id)},
+    async selectSession(id){this.sid=id;this.tab='agents';this.docContent='';this.liveEvents=[];this.diagnostics=null;await this.loadDetail(id);this.connectSSE(id)},
     async loadDetail(id){
       try{const r=await fetch('/api/sessions/'+id);this.s=await r.json();
         if(this.s.needs_human&&this.tab==='agents')this.tab='decisions';
+        await this.loadDiagnostics(id);
       }catch(e){console.error(e)}
+    },
+    async loadDiagnostics(id){
+      try{const r=await fetch('/api/sessions/'+id+'/diagnostics');if(r.ok)this.diagnostics=await r.json()}catch(e){console.error(e)}
     },
     async loadDoc(){
       if(!this.sid)return;
