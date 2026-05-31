@@ -27,3 +27,15 @@ logs/
 
 # AtomCode runtime artifacts
 .atomcode/graph.bin
+
+# Agent skills symlinks (unified to root skills/)
+.agents/skills/
+.claude/skills/
+.cursor/skills/
+.atomcode/skills/
+.trae/skills/
+.kimi/skills/
+
+# Playwright MCP runtime artifacts
+.playwright-mcp/
+

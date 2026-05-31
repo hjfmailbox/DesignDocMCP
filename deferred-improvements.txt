@@ -1,0 +1,437 @@
+# Deferred Improvements — DesignDocMCP
+
+This file records intentionally deferred improvements discovered during
+real development and workflow validation.
+
+Principles:
+
+* Only real technical debt or validated architectural gaps
+* No speculative roadmap ideas
+* Remove item after implementation
+* Priorities:
+
+  * P1 = already affecting development quality
+  * P2 = medium-term maintainability
+  * P3 = future enhancement / ergonomics
+
+---
+
+## D1 — revert_to_event should evolve toward deterministic replay
+
+**Priority**: P1
+
+### Problem
+
+Current `revert_to_event()` implementation uses:
+
+* list truncation
+* derived-state cleanup
+* heuristic phase/status reconstruction
+
+This is acceptable for v0.3 but becomes fragile as workflow complexity grows.
+
+Future risks:
+
+* nested workflow states
+* multiple HUMAN_REVIEW branches
+* replay-sensitive derived fields
+* requirement hierarchy branching
+
+### Why Deferred
+
+Current behavior is stable and covered by tests.
+
+Risk only grows when workflow complexity increases.
+
+### Desired Direction
+
+Move toward deterministic reconstruction:
+
+```text
+initial_state + replay(events)
+```
+
+instead of inferred state mutation.
+
+### Suggested Fix
+
+Introduce replay reconstruction engine:
+
+1. reset session runtime state
+2. replay events in order
+3. rebuild derived state deterministically
+
+### Risk
+
+Medium
+
+---
+
+## D2 — revert_to_event does not truncate requirement_deltas
+
+**Priority**: P1
+
+### Problem
+
+Loop 8 introduced `RequirementDelta`.
+
+Current `revert_to_event()` does **not** truncate:
+
+```text
+session.requirement_deltas
+```
+
+Undo may leave requirement hierarchy inconsistent with event history.
+
+### Why Deferred
+
+Loop 8 explicitly excluded replay/undo redesign.
+
+Currently low impact.
+
+### Suggested Fix
+
+Extend `revert_to_event()`:
+
+```text
+created_at <= target_event.created_at
+```
+
+truncate:
+
+```text
+requirement_deltas
+```
+
+Add rollback regression tests.
+
+### Risk
+
+Low
+
+---
+
+## D3 — API error contract uses HTTP 200 for failures
+
+**Priority**: P1
+
+### Problem
+
+Current invalid-session behavior:
+
+```json
+200 + {"error":"..."}
+```
+
+Internally consistent but REST-inconsistent.
+
+Expected:
+
+```text
+404 Not Found
+```
+
+or
+
+```text
+400 Bad Request
+```
+
+### Why Deferred
+
+Changing behavior affects:
+
+* clients
+* tests
+* backward compatibility
+
+Loop 9 intentionally preserved compatibility.
+
+### Suggested Fix
+
+Standardize contract:
+
+```text
+invalid session → 404
+validation failure → 400
+unexpected exception → 500
+```
+
+Update API E2E tests.
+
+### Risk
+
+Medium
+
+---
+
+## D4 — Clarify rewrite multi-round support is not future-safe
+
+**Priority**: P1
+
+### Problem
+
+Loop 3 validation found:
+
+`CLARIFY_REWRITE` completion logic uses historical submissions.
+
+If future workflow allows re-entering clarify rewrite:
+
+historical `refined_requirement` records may pollute completion detection.
+
+### Why Deferred
+
+Current architecture never re-enters clarify rewrite.
+
+No active bug.
+
+### Suggested Fix
+
+Add round scoping:
+
+```text
+clarify_round
+round_number
+```
+
+to refined requirement submission tracking.
+
+Completion should filter by current round.
+
+### Risk
+
+Medium
+
+---
+
+## D5 — RequirementDelta hierarchy not exposed in APIs
+
+**Priority**: P2
+
+### Problem
+
+`RequirementDelta` exists but is invisible in:
+
+```text
+get_session_summary()
+get_session_flow()
+```
+
+Requirement evolution tree cannot be visualized or exported.
+
+### Why Deferred
+
+Hierarchy persistence works.
+
+Visibility layer not yet required.
+
+### Suggested Fix
+
+Expose:
+
+* delta count
+* parent-child relations
+* optional tree serialization
+
+### Risk
+
+Low
+
+---
+
+## D6 — Session recovery remains heuristic after restart
+
+**Priority**: P2
+
+### Problem
+
+Runtime reconstruction after restart still depends on inferred state.
+
+Complex HUMAN_REVIEW or partial workflow recovery may drift.
+
+### Why Deferred
+
+Current recovery is stable enough for v0.3.
+
+No reproducible failure.
+
+### Suggested Fix
+
+Improve recovery from:
+
+```text
+events + persisted workflow state
+```
+
+instead of status inference.
+
+### Risk
+
+Medium
+
+---
+
+## D7 — Constants extraction requires drift auditing
+
+**Priority**: P2
+
+### Problem
+
+Loop 7 centralized runtime constants.
+
+Future development may silently reintroduce duplicated literals.
+
+### Why Deferred
+
+No active issue yet.
+
+Needs periodic maintenance.
+
+### Suggested Fix
+
+Add audit script / CI grep:
+
+Detect:
+
+* duplicated thresholds
+* retry intervals
+* timeout literals
+* repeated action names
+* status strings
+
+### Risk
+
+Low
+
+---
+
+## D8 — E2E API coverage still incomplete
+
+**Priority**: P2
+
+### Problem
+
+Loop 9 expanded coverage to 56 tests.
+
+Still missing:
+
+* multi-agent disagreement paths
+* rejoin flows
+* undo/revert flows
+* long workflow lifecycle
+
+### Why Deferred
+
+Core paths already protected.
+
+### Suggested Fix
+
+Add E2E suites for:
+
+```text
+proposal → challenge → vote → review
+undo lifecycle
+agent reconnect
+branching debate states
+```
+
+### Risk
+
+Low
+
+---
+
+## D9 — Document generation lacks quality validation
+
+**Priority**: P3
+
+### Problem
+
+Successful generation ≠ useful document quality.
+
+Currently validates:
+
+```text
+generation succeeded
+```
+
+Not:
+
+```text
+content quality
+structure completeness
+empty-section regression
+```
+
+### Why Deferred
+
+Functional correctness prioritized first.
+
+### Suggested Fix
+
+Add quality assertions:
+
+* minimum section completeness
+* required structure
+* placeholder detection
+
+### Risk
+
+Low
+
+---
+
+## D10 — Export format diversification
+
+**Priority**: P3
+
+### Problem
+
+Multiple export formats were planned but not implemented.
+
+### Why Deferred
+
+Current markdown/document flow sufficient.
+
+### Suggested Fix
+
+Support:
+
+```text
+markdown
+json
+html
+pdf
+```
+
+### Risk
+
+Low
+
+---
+
+## D11 — Session flow visualization
+
+**Priority**: P3
+
+### Problem
+
+Workflow state is hard to inspect visually.
+
+### Why Deferred
+
+Not required for correctness.
+
+### Suggested Fix
+
+Expose:
+
+```text
+phase transitions
+event timeline
+requirement evolution graph
+```
+
+### Risk
+
+Low
