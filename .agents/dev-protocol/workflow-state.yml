@@ -10,12 +10,12 @@ project:
 
 state:
   current_phase: capability_expansion
-  current_focus: phase_b_complete_awaiting_next_phase
-  active_work: awaiting_user_direction_for_next_phase
+  current_focus: phase_c_loop_1_complete_awaiting_loop_2
+  active_work: phase_c_deterministic_session_replay_engine
   blockers: none_detected
   last_activity:
-    commit: "6f4f5883714d46b1b6935d63f6bbce541b5901e1"
-    message: "chore(plan): mark Loop 1 completed in Phase B plan"
+    commit: "4f8e9ba423cd9332822b4c5894fa5d64d8419fad"
+    message: "feat(engine): add deterministic derived-state builder from event stream"
     date: "2026-05-30"
 
 version_tracking:
@@ -57,14 +57,17 @@ version_tracking:
     - phase_b_loop_1_event_timeline_api
     - phase_b_loop_2_frontend_bulk_resolve
     - phase_b_loop_3_timeline_rendering
-  in_progress: []
+    - phase_c_loop_1_event_builder
+  in_progress:
+    - phase_c_loop_2_revert_replay
   pending:
-    - user_direction_for_next_phase
+    - phase_c_loop_3_validate_recovery
+    - phase_c_loop_4_replay_regression
 
 checkpoint:
-  last_commit: "d44957a74d7f98851cb699b914397044fccd5ad0"
+  last_commit: "4f8e9ba423cd9332822b4c5894fa5d64d8419fad"
   last_updated: "2026-05-30"
-  summary: "Phase B complete. Frontend decision-point enhancement + timeline visualization. 101 tests passing. Awaiting next phase direction."
+  summary: "Phase C Loop 1 complete. Deterministic derived-state builder implemented. 104 tests passing. Loop 2 pending: replace revert_to_event with replay reconstruction."
 
 git:
   branch: master

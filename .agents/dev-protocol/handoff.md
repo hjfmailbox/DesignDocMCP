@@ -5,19 +5,22 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Phase B — Frontend Decision-Point Enhancement + Timeline Visualization 全部完成。
-101 tests passing。等待用户定义下一阶段方向。
+Phase C — Deterministic Session Replay Engine。
+Loop 1 完成（`_rebuild_derived_state()` builder 实现）。104 tests passing。
+等待执行 Loop 2（替换 `revert_to_event()` 为 replay-based reconstruction）。
 
 ## Next Recommended Actions
 
-1. **Generate new plan** for next phase (PDF export, agent health panel, deterministic replay, or user-defined)
-2. **Run `/dev-scope`** for a specific user goal
-3. **Review deferred-improvements.txt** for remaining P1 items if technical debt becomes blocking
+1. **Run `/continue-loop`** 执行 Phase C Loop 2：替换 `revert_to_event()` 为 replay-based reconstruction
+2. **Run `/continue-loop`** 执行 Phase C Loop 3：验证 restart recovery
+3. **Run `/continue-loop`** 执行 Phase C Loop 4：replay determinism regression tests
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` Phase B 全部 3 个 loops 已完成。
-- `workflow-state.yml` checkpoint 已同步至 `d44957a`。
+- `next-phase-plan.md` Phase C 计划中 Loop 1 已完成，Loop 2/3/4 pending。
+- `workflow-state.yml` checkpoint 已同步至 `4f8e9ba`。
+- `current-focus.md` and `issues.md` accurately reflect code reality.
+- No blockers. Workspace is clean. Ready for Loop 2.
 - `current-focus.md` and `issues.md` accurately reflect code reality.
 - No blockers. Workspace is clean. Ready for Loop 2.
 - Checkpoint 已同步至 `db9285c`（Phase A 全部 3 个 loops）。
