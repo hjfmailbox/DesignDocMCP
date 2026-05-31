@@ -19,7 +19,7 @@
 
 ## Loop 1 — Implement event-driven state builder
 
-**Status:** pending
+**Status:** completed
 **Priority:** P1
 
 **Goal:** 在 `engine.py` 中提取 `_build_state_from_events(events)` 方法，接收事件列表并重建 session 的派生状态（phase、round、proposals、challenges、votes、merged_assumptions、status），完全基于事件流而非直接读取 persisted state。
