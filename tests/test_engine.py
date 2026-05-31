@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1474,3 +1475,127 @@ class TestMultiHumanReview:
         sid = session.session_id
         with pytest.raises(ValueError, match="Session is not in human review state"):
             engine.submit_human_vote(sid, "Reviewer1", "agree")
+
+
+class TestSessionDiagnostics:
+    """Loop 1 — Session diagnostics engine tests."""
+
+    def test_healthy_session_returns_full_score(self, engine):
+        """完整 debate 后的健康 session 返回 health_score=100，warnings 为空。"""
+        from tests.test_replay_determinism import _build_full_debate_session
+
+        session = _build_full_debate_session(engine)
+        diag = engine.get_session_diagnostics(session.session_id)
+
+        assert diag["health_score"] == 100
+        assert diag["stall_status"]["is_stalled"] is False
+        assert diag["data_consistency"]["valid"] is True
+        assert diag["warnings"] == []
+        assert diag["workflow_progress"]["terminal_phase"] is True
+
+    def test_corrupted_session_detects_consistency_mismatch(self, engine):
+        """手动篡改 derived state 后，diagnostics 检测到 mismatch 并报告 warnings。"""
+        session = engine.create_session(title="Diag Corrupt", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+
+        # 篡改状态
+        session = engine.store.get_session(sid)
+        session.current_phase = DebatePhase.PROPOSAL
+        session.status = SessionStatus.PROPOSAL
+        engine.store.update_session(session)
+
+        diag = engine.get_session_diagnostics(sid)
+        assert diag["data_consistency"]["valid"] is False
+        assert any("phase" in w["message"] for w in diag["warnings"])
+        assert diag["health_score"] <= 50
+
+    def test_stalled_session_detected_by_updated_at(self, engine):
+        """updated_at 超过 300 秒的 ACTIVE session 被标记为 stalled。"""
+        import json as _json
+
+        session = engine.create_session(title="Diag Stall", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.submit_requirement(sid, problem_statement="Test")
+
+        # 直接修改 store JSON 文件中的 updated_at 为 400 秒前，并清除缓存
+        path = engine.store._session_path(sid)
+        data = _json.loads(path.read_text(encoding="utf-8"))
+        stale_time = (datetime.now(timezone.utc) - timedelta(seconds=400)).isoformat()
+        data["updated_at"] = stale_time
+        path.write_text(_json.dumps(data), encoding="utf-8")
+        engine.store._sessions.pop(sid, None)
+        engine.store._mtimes.pop(sid, None)
+
+        diag = engine.get_session_diagnostics(sid)
+        assert diag["stall_status"]["is_stalled"] is True
+        assert diag["stall_status"]["seconds_since_activity"] >= 400
+        assert any(w["category"] == "stall" for w in diag["warnings"])
+
+    def test_non_stalled_active_session(self, engine):
+        """刚创建的 ACTIVE session 不被标记为 stalled。"""
+        session = engine.create_session(title="Diag Active", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+
+        diag = engine.get_session_diagnostics(sid)
+        assert diag["stall_status"]["is_stalled"] is False
+        assert diag["stall_status"]["seconds_since_activity"] < 300
+
+    def test_diagnostics_is_read_only(self, engine):
+        """连续调用两次 diagnostics，session 状态无任何变化。"""
+        session = engine.create_session(title="Diag ReadOnly", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+
+        # 第一次调用前 snapshot
+        session = engine.store.get_session(sid)
+        before = {
+            "phase": session.current_phase,
+            "round": session.current_round,
+            "status": session.status,
+            "events_len": len(session.events),
+        }
+
+        engine.get_session_diagnostics(sid)
+        engine.get_session_diagnostics(sid)
+
+        session = engine.store.get_session(sid)
+        after = {
+            "phase": session.current_phase,
+            "round": session.current_round,
+            "status": session.status,
+            "events_len": len(session.events),
+        }
+        assert before == after
+
+    def test_no_agents_warning(self, engine):
+        """ACTIVE session 无 agents 时生成 workflow warning。"""
+        session = engine.create_session(title="Diag No Agents", description="Test")
+        sid = session.session_id
+        # 不注册 agent
+
+        diag = engine.get_session_diagnostics(sid)
+        assert any(
+            "No agents registered" in w["message"] for w in diag["warnings"]
+        )
+
+    def test_human_review_no_votes_warning(self, engine):
+        """HUMAN_REVIEW session 零投票时生成 workflow warning。"""
+        session = engine.create_session(title="Diag HR", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.register_agent(sid, name="Agent1")
+        session = engine.store.get_session(sid)
+        session.status = SessionStatus.HUMAN_REVIEW
+        engine.store.update_session(session)
+
+        diag = engine.get_session_diagnostics(sid)
+        assert any(
+            "human review with zero votes" in w["message"] for w in diag["warnings"]
+        )

@@ -2294,6 +2294,128 @@ class CollaborationEngine:
 
         return {"valid": True, "mismatches": []}
 
+    def get_session_diagnostics(self, session_id: str) -> dict[str, Any]:
+        """Return read-only diagnostics for a session.
+
+        Does NOT mutate session state. Uses store.get_session directly to
+        avoid triggering consistency-validation warning logs.
+        """
+        session = self.store.get_session(session_id)
+        if session is None:
+            raise ValueError(f"Session '{session_id}' not found")
+
+        # --- data consistency (read-only replay) ---
+        snapshot = {
+            "phase": session.current_phase,
+            "round": session.current_round,
+            "status": session.status,
+            "clarify_refine_submitted": list(session.clarify_refine_submitted),
+        }
+        self._rebuild_derived_state(session)
+        consistency_mismatches = []
+        if session.current_phase != snapshot["phase"]:
+            consistency_mismatches.append(
+                f"phase: expected {snapshot['phase'].value}, got {session.current_phase.value}"
+            )
+        if session.current_round != snapshot["round"]:
+            consistency_mismatches.append(
+                f"round: expected {snapshot['round']}, got {session.current_round}"
+            )
+        if session.status != snapshot["status"]:
+            consistency_mismatches.append(
+                f"status: expected {snapshot['status'].value}, got {session.status.value}"
+            )
+        if session.clarify_refine_submitted != snapshot["clarify_refine_submitted"]:
+            consistency_mismatches.append("clarify_refine_submitted mismatch")
+        # restore
+        session.current_phase = snapshot["phase"]
+        session.current_round = snapshot["round"]
+        session.status = snapshot["status"]
+        session.clarify_refine_submitted = snapshot["clarify_refine_submitted"]
+
+        data_consistency = {
+            "valid": len(consistency_mismatches) == 0,
+            "mismatches": consistency_mismatches,
+        }
+
+        # --- workflow progress ---
+        terminal_phases = {DebatePhase.CONSENSUS}
+        workflow_progress = {
+            "current_phase": session.current_phase.value,
+            "has_requirement": session.requirement is not None,
+            "agent_count": len(session.agents),
+            "terminal_phase": session.current_phase in terminal_phases,
+        }
+
+        # --- stall detection ---
+        STALL_THRESHOLD_SECONDS = 300
+        now = datetime.now(timezone.utc)
+        try:
+            updated_at = datetime.fromisoformat(session.updated_at)
+            seconds_since_activity = int((now - updated_at).total_seconds())
+        except (ValueError, TypeError):
+            seconds_since_activity = 0
+        non_stall_statuses = {SessionStatus.COMPLETED, SessionStatus.ARCHIVED}
+        is_stalled = (
+            session.status not in non_stall_statuses
+            and seconds_since_activity > STALL_THRESHOLD_SECONDS
+        )
+        stall_status = {
+            "is_stalled": is_stalled,
+            "seconds_since_activity": seconds_since_activity,
+            "threshold_seconds": STALL_THRESHOLD_SECONDS,
+        }
+
+        # --- warnings (bounded, deterministic) ---
+        warnings: list[dict[str, str]] = []
+        if not data_consistency["valid"]:
+            warnings.append({
+                "category": "consistency",
+                "message": f"Derived state mismatch: {', '.join(consistency_mismatches[:3])}",
+            })
+        if is_stalled:
+            warnings.append({
+                "category": "stall",
+                "message": f"Session stalled for {seconds_since_activity}s (threshold {STALL_THRESHOLD_SECONDS}s)",
+            })
+        if session.status not in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED) and not session.agents:
+            warnings.append({
+                "category": "workflow",
+                "message": "No agents registered in active session",
+            })
+        if session.status == SessionStatus.HUMAN_REVIEW and not session.human_votes:
+            warnings.append({
+                "category": "workflow",
+                "message": "Session in human review with zero votes",
+            })
+        # bound to 10
+        warnings = warnings[:10]
+
+        # --- health score ---
+        consistency_score = 40 if data_consistency["valid"] else 0
+        # workflow completeness: requirement + agents + phase progress
+        workflow_score = 0
+        if workflow_progress["has_requirement"]:
+            workflow_score += 10
+        if workflow_progress["agent_count"] >= 2:
+            workflow_score += 10
+        if workflow_progress["terminal_phase"]:
+            workflow_score += 10
+        completion_bonus = 30 if session.status == SessionStatus.COMPLETED else 0
+        stall_penalty = 0 if not is_stalled else 30
+        health_score = max(0, min(100, consistency_score + workflow_score + completion_bonus - stall_penalty))
+        # cap at 50 if consistency fails
+        if not data_consistency["valid"]:
+            health_score = min(health_score, 50)
+
+        return {
+            "health_score": health_score,
+            "stall_status": stall_status,
+            "data_consistency": data_consistency,
+            "warnings": warnings,
+            "workflow_progress": workflow_progress,
+        }
+
     def _get(self, session_id: str) -> Session:
         session = self.store.get_session(session_id)
         if session is None:
