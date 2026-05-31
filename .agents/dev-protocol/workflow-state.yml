@@ -9,14 +9,14 @@ project:
   framework: FastMCP + FastAPI
 
 state:
-  current_phase: capability_expansion
-  current_focus: phase_c_all_loops_complete_awaiting_next_phase
-  active_work: phase_c_deterministic_session_replay_engine
+  current_phase: operational_readiness
+  current_focus: phase_d_all_loops_complete_awaiting_next_phase
+  active_work: phase_d_session_diagnostics_health_checks_observability
   blockers: none_detected
   last_activity:
-    commit: "7e24e6e8b7047f1f759114ee0139ef6ca770e688"
-    message: "refactor(engine): replace revert_to_event with replay-based reconstruction"
-    date: "2026-05-30"
+    commit: "73d513b4b9c0086ff6d5a1c90f0f33ca5c4ca0b8"
+    message: "feat(frontend): render session diagnostics card in detail view"
+    date: "2026-05-31"
 
 version_tracking:
   completed_phases:
@@ -59,55 +59,18 @@ version_tracking:
     - phase_b_loop_3_timeline_rendering
     - phase_c_loop_1_event_builder
     - phase_c_loop_2_revert_replay
-  completed_phases:
-    - dev_protocol_v2_onboarding
-    - D0_state_cleanup
-    - D0_onboarding_state_fix
-    - P2_8_status_guard_fix
-    - P2_doc_status_sync
-    - current_focus_anchor_created
-    - next_phase_plan_created
-    - spec_status_sync_loop_1
-    - issues_md_sync_loop_2
-    - clarify_rewrite_verify_loop_3
-    - test_coverage_loop_4
-    - undo_rollback_loop_5
-    - loop_6_api_audit
-    - loop_7_constants
-    - loop_8_hierarchical_deltas
-    - loop_9_e2e_tests
-    - loop_10_docs_sweep
-    - history_rewrite_remove_deferred_improvements
-    - external_validation_loop_1_compare_sessions
-    - external_validation_loop_2_html_export
-    - external_validation_loop_3_multi_human_review
-    - external_validation_docs_sync_loop_4_7
-    - loop_1_revert_delta_truncation
-    - loop_2_api_error_status_codes
-    - loop_3_delta_hierarchy_api
-    - loop_4_e2e_coverage_expansion
-    - loop_5_json_export
-    - loop_1_document_quality_assertions
-    - loop_2_event_timeline_api
-    - loop_3_decision_points_rest
-    - loop_4_active_session_resource
-    - phase_a_loop_1_engine_bulk_resolve
-    - phase_a_loop_2_rest_endpoint
-    - phase_a_loop_3_mcp_tool
-    - phase_b_loop_1_event_timeline_api
-    - phase_b_loop_2_frontend_bulk_resolve
-    - phase_b_loop_3_timeline_rendering
-    - phase_c_loop_1_event_builder
-    - phase_c_loop_2_revert_replay
     - phase_c_loop_3_validate_recovery
     - phase_c_loop_4_replay_regression
+    - phase_d_loop_1_diagnostics_engine
+    - phase_d_loop_2_rest_api
+    - phase_d_loop_3_frontend
   in_progress: []
   pending: []
 
 checkpoint:
-  last_commit: "c3314e96dca3a9c8ecc1474d1b12d135e48f20ac"
+  last_commit: "73d513b4b9c0086ff6d5a1c90f0f33ca5c4ca0b8"
   last_updated: "2026-05-31"
-  summary: "Phase C complete. All 4 loops done: event-driven state builder, replay-based revert, validate_session_consistency, replay determinism regression suite. 115 tests passing. Awaiting next phase direction."
+  summary: "Phase D complete. All 3 loops done: session diagnostics engine, REST API exposure, frontend diagnostics card. 126 tests passing. Ready for next phase."
 
 git:
   branch: master
