@@ -1399,6 +1399,59 @@ class CollaborationEngine:
         logger.info("resume_session: session %s resumed to %s", session_id, previous_status)
         return {"session_id": session_id, "status": session.status.value, "resumed_from": previous_status}
 
+    def _rebuild_derived_state(self, session: Any) -> None:
+        """Rebuild derived session state (phase, round, status, flags) from event stream.
+
+        This is the deterministic core of the replay engine. It does NOT mutate
+        primary data lists (agents, proposals, challenges, etc.) — only derived
+        state that can be inferred from events.
+        """
+        if not session.events:
+            return
+
+        last_event = session.events[-1]
+        session.current_phase = last_event.phase
+        session.current_round = last_event.round_number
+
+        # Rebuild status from system events (deterministic inference)
+        session.status = SessionStatus(last_event.phase.value)
+        for event in reversed(session.events):
+            if event.event_type == EventType.SYSTEM_EVENT:
+                content = event.content
+                if "waiting for human approval" in content or "moved to human review" in content or "escalated to human review" in content:
+                    session.status = SessionStatus.HUMAN_REVIEW
+                    break
+                if "Consensus reached" in content or "Full consensus" in content:
+                    session.status = SessionStatus.COMPLETED
+                    break
+                if "Auto-advanced" in content:
+                    try:
+                        session.status = SessionStatus(session.current_phase.value)
+                    except ValueError:
+                        session.status = SessionStatus.CREATED
+                    break
+
+        # Clear derived state that depends on transient computation
+        session.merged_assumptions = []
+        session.novelty_scores = []
+
+        # Rebuild clarify_refine_submitted from REQUIREMENT_REFINE events
+        session.clarify_refine_submitted = []
+        for event in session.events:
+            if event.event_type == EventType.REQUIREMENT_REFINE:
+                if event.source_agent not in session.clarify_refine_submitted:
+                    session.clarify_refine_submitted.append(event.source_agent)
+
+        # Devils advocate agent is chosen randomly during phase advance and
+        # is not recorded in event content, so it cannot be deterministically
+        # rebuilt from the event stream alone.
+        session.devils_advocate_agent = ""
+
+        if session.status != SessionStatus.COMPLETED:
+            session.completed_at = None
+        if session.status != SessionStatus.ARCHIVED:
+            session.archived_at = None
+
     def revert_to_event(self, session_id: str, event_id: str) -> dict:
         """Revert session state to a specific event point using the event log.
 

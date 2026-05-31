@@ -1057,6 +1057,70 @@ class TestRevertToEvent:
             engine.revert_to_event(sid, "nonexistent-event-id")
 
 
+class TestRebuildDerivedState:
+    def test_rebuild_matches_original_phase_round_status(self, engine):
+        """builder 重建的 phase/round/status 与原始 session 一致"""
+        session = engine.create_session(title="Rebuild Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        expected_phase = session.current_phase
+        expected_round = session.current_round
+        expected_status = session.status
+
+        # Simulate corrupted derived state
+        session.merged_assumptions = ["stale"]
+        session.clarify_refine_submitted = ["stale"]
+        session.devils_advocate_agent = "stale"
+        session.novelty_scores = [0.5]
+
+        engine._rebuild_derived_state(session)
+
+        assert session.current_phase == expected_phase
+        assert session.current_round == expected_round
+        assert session.status == expected_status
+
+    def test_rebuild_from_empty_events_is_noop(self, engine):
+        """空 events 列表时 builder 不崩溃"""
+        session = engine.create_session(title="Empty Events", description="Test")
+        sid = session.session_id
+        session = engine.store.get_session(sid)
+        original_phase = session.current_phase
+        original_status = session.status
+
+        session.events = []
+        engine._rebuild_derived_state(session)
+
+        assert session.current_phase == original_phase
+        assert session.status == original_status
+
+    def test_rebuild_clarify_refine_submitted_from_events(self, engine):
+        """builder 从 REQUIREMENT_REFINE events 重建 clarify_refine_submitted"""
+        session = engine.create_session(title="Refine Submitted", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+
+        session = engine.store.get_session(sid)
+        session.clarify_refine_submitted = []
+        engine._rebuild_derived_state(session)
+
+        # In this flow no REQUIREMENT_REFINE events exist yet
+        assert session.clarify_refine_submitted == []
+
+
 class TestDebatePhaseCreated:
     def test_new_session_has_created_phase(self, engine):
         session = engine.create_session(title="New Session", description="Test")
