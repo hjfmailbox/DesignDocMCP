@@ -87,7 +87,7 @@
 
 ## Loop 3 — Render diagnostics in frontend
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2
 
 **Goal:** 在 `static/index.html` 的 session detail 页面添加 diagnostics 卡片，显示 health score（颜色编码）、stall 状态、warnings 列表。
