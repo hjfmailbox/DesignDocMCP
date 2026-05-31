@@ -5,20 +5,20 @@ Last updated by /dev-save on 2026-05-30.
 
 ## Current Focus
 
-Phase C — Deterministic Session Replay Engine。
-Loop 3 完成（`validate_session_consistency()` 添加并集成到 `_get()`）。107 tests passing。
-等待执行 Loop 4（replay determinism regression suite）。
+Phase C — Deterministic Session Replay Engine。全部 4 个 loops 完成。115 tests passing。
+等待用户决定下一阶段方向。
 
 ## Next Recommended Actions
 
-1. **Run `/continue-loop`** 执行 Phase C Loop 4：replay determinism regression tests
-2. **Run `/dev-save`** 在 Loop 4 完成后同步协议状态
+1. **Run `/dev-scope`** 分析并决定下一阶段方向
+2. **Review deferred-improvements.txt** 查找剩余 P1 项
+3. **Run `/generate-plan`** 为下一阶段生成详细计划
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` Phase C 计划中 Loop 1-3 已完成，Loop 4 pending。
-- `workflow-state.yml` checkpoint 已同步至 `4085b43`。
-- No blockers. Workspace is clean. Ready for Loop 4.
+- `next-phase-plan.md` Phase C 计划全部完成（Loop 1-4）。
+- `workflow-state.yml` checkpoint 已同步至 `c3314e9`。
+- No blockers. Workspace is clean. Ready for next phase.
 - `current-focus.md` and `issues.md` accurately reflect code reality.
 
 ---
@@ -93,6 +93,24 @@ Events are appended in chronological order naturally, so timeline generation onl
 
 ### Key finding during implementation
 `submit_decision_points` auto-generates `decision_id` via UUID, so tests cannot assert on hardcoded IDs.
+
+---
+
+## Loop 4 — Replay determinism regression suite (Completed 2026-05-31)
+
+**Status:** Completed
+**Commit:** `02ec037` — `test(replay): add replay determinism regression suite`
+**Tests:** 115 passing (107 → 115)
+
+### What changed
+- `tests/test_replay_determinism.py` — 新增 8 个 replay 确定性回归测试，覆盖 3 个复杂场景：
+  1. 完整 debate lifecycle（created → clarify → proposal → critic → revision → optimization → devils_advocate → consensus → completed）
+  2. 多轮 human review（含 post-vote completion）
+  3. 带 undo 的 session（单次 revert、多次 revert）
+- `src/designdoc_mcp/engine.py:1424` — 修复 `_rebuild_derived_state` 识别 `"Human review completed"` system event 为 `COMPLETED` 状态信号
+
+### Key finding during implementation
+`_rebuild_derived_state` 与 `submit_human_vote` 的事件措辞存在不一致：vote 完成时写入 `"Human review completed by majority vote"`，但 builder 只匹配 `"Consensus reached"` / `"Full consensus"`。这导致 human review 场景 replay 后 status 丢失。修复后 builder 能正确识别所有完成路径。
 
 ---
 

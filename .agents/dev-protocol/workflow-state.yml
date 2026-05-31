@@ -10,7 +10,7 @@ project:
 
 state:
   current_phase: capability_expansion
-  current_focus: phase_c_loop_3_complete_awaiting_loop_4
+  current_focus: phase_c_all_loops_complete_awaiting_next_phase
   active_work: phase_c_deterministic_session_replay_engine
   blockers: none_detected
   last_activity:
@@ -100,14 +100,14 @@ version_tracking:
     - phase_c_loop_1_event_builder
     - phase_c_loop_2_revert_replay
     - phase_c_loop_3_validate_recovery
-  in_progress: []
-  pending:
     - phase_c_loop_4_replay_regression
+  in_progress: []
+  pending: []
 
 checkpoint:
-  last_commit: "4085b438aa95e0d134b62091a0d9f44427b55364"
+  last_commit: "c3314e96dca3a9c8ecc1474d1b12d135e48f20ac"
   last_updated: "2026-05-31"
-  summary: "Phase C Loop 3 complete. validate_session_consistency added and integrated into _get(). 107 tests passing. Loop 4 pending: replay determinism regression suite."
+  summary: "Phase C complete. All 4 loops done: event-driven state builder, replay-based revert, validate_session_consistency, replay determinism regression suite. 115 tests passing. Awaiting next phase direction."
 
 git:
   branch: master
