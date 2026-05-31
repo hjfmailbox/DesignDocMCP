@@ -6,23 +6,20 @@ Last updated by /dev-save on 2026-05-30.
 ## Current Focus
 
 Phase C — Deterministic Session Replay Engine。
-Loop 2 完成（`revert_to_event()` 替换为 replay-based reconstruction）。104 tests passing。
-等待执行 Loop 3（验证 restart recovery with replay）。
+Loop 3 完成（`validate_session_consistency()` 添加并集成到 `_get()`）。107 tests passing。
+等待执行 Loop 4（replay determinism regression suite）。
 
 ## Next Recommended Actions
 
-1. **Run `/continue-loop`** 执行 Phase C Loop 3：验证 restart recovery with replay
-2. **Run `/continue-loop`** 执行 Phase C Loop 4：replay determinism regression tests
+1. **Run `/continue-loop`** 执行 Phase C Loop 4：replay determinism regression tests
+2. **Run `/dev-save`** 在 Loop 4 完成后同步协议状态
 
 ## Notes For Next Session
 
-- `next-phase-plan.md` Phase C 计划中 Loop 1-2 已完成，Loop 3/4 pending。
-- `workflow-state.yml` checkpoint 已同步至 `7e24e6e`。
+- `next-phase-plan.md` Phase C 计划中 Loop 1-3 已完成，Loop 4 pending。
+- `workflow-state.yml` checkpoint 已同步至 `4085b43`。
+- No blockers. Workspace is clean. Ready for Loop 4.
 - `current-focus.md` and `issues.md` accurately reflect code reality.
-- No blockers. Workspace is clean. Ready for Loop 2.
-- `current-focus.md` and `issues.md` accurately reflect code reality.
-- No blockers. Workspace is clean. Ready for Loop 2.
-- Checkpoint 已同步至 `db9285c`（Phase A 全部 3 个 loops）。
 
 ---
 
@@ -232,6 +229,21 @@ All 5 loops complete. 78 tests passing. Deferred improvements D2/D3/D5/D8/D10 re
 
 ### Compatibility note
 Response body format changed from custom `{"error": "..."}` / `{"action": "error", "message": "..."}` to FastAPI standard `{"detail": "..."}`. Any client parsing the old format must update.
+
+---
+
+## Loop 3 — Validate restart recovery with replay (Completed 2026-05-31)
+
+**Status:** Completed
+**Commit:** `67f9e91` — `feat(engine): add session consistency validation on load`
+**Tests:** 107 passing (104 → 107)
+
+### What changed
+- `src/designdoc_mcp/engine.py` — 新增 `validate_session_consistency(session)`：对加载后的 session replay 其 events 并断言关键字段（phase、round、status、agent_count）匹配；采用 snapshot/restore 模式确保零副作用；集成到 `_get()` 中（logging-only 模式，不阻断服务）
+- `tests/test_engine.py` — 新增 `TestValidateSessionConsistency` 含 3 个测试（valid session passes、corrupted session detects mismatch、validation does not mutate session）
+
+### Key finding during implementation
+当前 events 只包含 content strings，无法完全重建数据列表（proposals/challenges/votes 等）。builder 成功重建 derived state（phase、round、status、clarify_refine_submitted），但无法重建 devils_advocate_agent（随机选择，未记录）和 merged_assumptions（复杂合并逻辑不在 events 中）。验证失败时输出结构化 warning log（包含 mismatch 字段和 event count）。
 
 ---
 
