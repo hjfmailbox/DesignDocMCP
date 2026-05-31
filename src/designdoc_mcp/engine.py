@@ -2230,8 +2230,73 @@ class CollaborationEngine:
             "same_status": session_a.status == session_b.status,
         }
 
+    def validate_session_consistency(self, session: Any) -> dict:
+        """Validate that a loaded session's derived state matches its event stream.
+
+        Replays the event stream through _rebuild_derived_state and compares
+        key fields. Does NOT mutate the session's final state — snapshot is
+        restored after validation regardless of result.
+
+        Returns {"valid": bool, "mismatches": list[str]}.
+        """
+        if not session.events:
+            return {"valid": True, "mismatches": []}
+
+        snapshot = {
+            "phase": session.current_phase,
+            "round": session.current_round,
+            "status": session.status,
+            "clarify_refine_submitted": list(session.clarify_refine_submitted),
+            "merged_assumptions": list(session.merged_assumptions),
+            "devils_advocate_agent": session.devils_advocate_agent,
+            "novelty_scores": list(session.novelty_scores),
+            "completed_at": session.completed_at,
+            "archived_at": session.archived_at,
+        }
+
+        self._rebuild_derived_state(session)
+
+        mismatches = []
+        if session.current_phase != snapshot["phase"]:
+            mismatches.append(
+                f"phase: expected {snapshot['phase'].value}, got {session.current_phase.value}"
+            )
+        if session.current_round != snapshot["round"]:
+            mismatches.append(
+                f"round: expected {snapshot['round']}, got {session.current_round}"
+            )
+        if session.status != snapshot["status"]:
+            mismatches.append(
+                f"status: expected {snapshot['status'].value}, got {session.status.value}"
+            )
+        if session.clarify_refine_submitted != snapshot["clarify_refine_submitted"]:
+            mismatches.append("clarify_refine_submitted mismatch")
+
+        # Restore snapshot regardless of result
+        session.current_phase = snapshot["phase"]
+        session.current_round = snapshot["round"]
+        session.status = snapshot["status"]
+        session.clarify_refine_submitted = snapshot["clarify_refine_submitted"]
+        session.merged_assumptions = snapshot["merged_assumptions"]
+        session.devils_advocate_agent = snapshot["devils_advocate_agent"]
+        session.novelty_scores = snapshot["novelty_scores"]
+        session.completed_at = snapshot["completed_at"]
+        session.archived_at = snapshot["archived_at"]
+
+        if mismatches:
+            logger.warning(
+                "Session %s consistency validation failed (%d mismatches): %s",
+                session.session_id,
+                len(mismatches),
+                "; ".join(mismatches),
+            )
+            return {"valid": False, "mismatches": mismatches}
+
+        return {"valid": True, "mismatches": []}
+
     def _get(self, session_id: str) -> Session:
         session = self.store.get_session(session_id)
         if session is None:
             raise ValueError(f"Session '{session_id}' not found")
+        self.validate_session_consistency(session)
         return session

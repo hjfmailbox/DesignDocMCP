@@ -1121,6 +1121,66 @@ class TestRebuildDerivedState:
         assert session.clarify_refine_submitted == []
 
 
+class TestValidateSessionConsistency:
+    def test_valid_session_passes_validation(self, engine):
+        """正常 session 通过一致性验证"""
+        session = engine.create_session(title="Valid Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.submit_proposal(sid, "alpha", architecture="A")
+        engine.submit_proposal(sid, "beta", architecture="B")
+
+        session = engine.store.get_session(sid)
+        result = engine.validate_session_consistency(session)
+        assert result["valid"] is True
+        assert result["mismatches"] == []
+
+    def test_corrupted_session_detects_mismatch(self, engine):
+        """篡改 derived state 后验证应检测到 mismatch"""
+        session = engine.create_session(title="Corrupt Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.register_agent(sid, name="Beta")
+
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+
+        session = engine.store.get_session(sid)
+        original_phase = session.current_phase
+        # Corrupt the phase
+        session.current_phase = DebatePhase.PROPOSAL
+
+        result = engine.validate_session_consistency(session)
+        assert result["valid"] is False
+        assert any("phase" in m for m in result["mismatches"])
+
+        # Ensure session is restored to corrupted state (snapshot taken inside validate)
+        # The point is validation doesn't leave the session in a *different* state
+        assert session.current_phase == DebatePhase.PROPOSAL
+
+    def test_validation_does_not_mutate_session(self, engine):
+        """验证后 session 状态应完全恢复"""
+        session = engine.create_session(title="Immutable Test", description="Test")
+        sid = session.session_id
+        engine.register_agent(sid, name="Alpha")
+        engine.submit_requirement(sid, problem_statement="Build a system")
+        engine.start_clarification(sid)
+
+        session = engine.store.get_session(sid)
+        original_round = session.current_round
+        original_status = session.status
+
+        engine.validate_session_consistency(session)
+
+        assert session.current_round == original_round
+        assert session.status == original_status
+
+
 class TestDebatePhaseCreated:
     def test_new_session_has_created_phase(self, engine):
         session = engine.create_session(title="New Session", description="Test")
