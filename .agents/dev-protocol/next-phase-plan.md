@@ -73,7 +73,7 @@
 
 ## Loop 4 — Replay determinism regression suite
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2
 
 **Goal:** 创建 `tests/test_replay_determinism.py`，覆盖完整辩论生命周期的 replay 确定性验证。
