@@ -55,7 +55,7 @@
 
 ## Loop 3 — Validate restart recovery with replay
 
-**Status:** pending
+**Status:** completed
 **Priority:** P2
 
 **Goal:** 添加 `validate_session_consistency(session)`，对加载后的 session replay 其 events 并断言关键字段（phase、round、status、agent_count）匹配。在 engine 初始化或 `_get()` 中集成（logging-only 模式，不阻断服务）。
