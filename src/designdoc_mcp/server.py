@@ -1186,7 +1186,7 @@ def wait_for_task(session_id: str, agent_id: str, timeout: int = WAIT_FOR_TASK_T
     Args:
         session_id: The session identifier
         agent_id: Your agent identifier
-        timeout: Maximum seconds to wait (default: 300, max: 600)
+        timeout: Maximum seconds to wait (default: 25, max: 600)
 
     Returns:
         Task dict with keys: task_id, task_type, phase, round_number, payload

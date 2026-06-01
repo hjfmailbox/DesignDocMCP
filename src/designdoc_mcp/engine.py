@@ -681,6 +681,10 @@ class CollaborationEngine:
         self._validate_agent(session, agent_id)
         self._touch_agent(session, agent_id)
 
+        existing = [r for r in session.refined_requirements if r.agent_id == agent_id]
+        if existing:
+            raise ValueError(f"Agent '{agent_id}' already submitted a refined requirement")
+
         refined = RefinedRequirement(
             refine_id=uuid.uuid4().hex[:8],
             session_id=session_id,
@@ -827,6 +831,10 @@ class CollaborationEngine:
         self._validate_agent(session, agent_id)
         self._touch_agent(session, agent_id)
 
+        existing = [c for c in session.challenges if c.agent_id == agent_id and c.round_number == session.current_round]
+        if existing:
+            raise ValueError(f"Agent '{agent_id}' already submitted a challenge for round {session.current_round}")
+
         # 验证目标 agent 存在
         active_count = self._active_agent_count(session)
         if target_agent_id == agent_id and active_count > 1:
@@ -877,6 +885,10 @@ class CollaborationEngine:
         self._validate_phase(session, DebatePhase.REVISION)
         self._validate_agent(session, agent_id)
         self._touch_agent(session, agent_id)
+
+        existing = [r for r in session.revisions if r.agent_id == agent_id and r.round_number == session.current_round]
+        if existing:
+            raise ValueError(f"Agent '{agent_id}' already submitted a revision for round {session.current_round}")
 
         revision = Revision(
             revision_id=uuid.uuid4().hex[:8],
@@ -1121,6 +1133,10 @@ class CollaborationEngine:
         self._validate_agent(session, agent_id)
         self._touch_agent(session, agent_id)
 
+        existing = [o for o in session.optimizations if o.agent_id == agent_id and o.round_number == session.current_round]
+        if existing:
+            raise ValueError(f"Agent '{agent_id}' already submitted an optimization for round {session.current_round}")
+
         optimization = Optimization(
             optimization_id=uuid.uuid4().hex[:8],
             session_id=session_id,
@@ -1149,6 +1165,10 @@ class CollaborationEngine:
         self._validate_phase(session, DebatePhase.DEVILS_ADVOCATE)
         self._validate_agent(session, agent_id)
         self._touch_agent(session, agent_id)
+
+        existing = [d for d in session.devils_advocates if d.agent_id == agent_id and d.round_number == session.current_round]
+        if existing:
+            raise ValueError(f"Agent '{agent_id}' already submitted a devil's advocate for round {session.current_round}")
 
         da = DevilsAdvocate(
             da_id=uuid.uuid4().hex[:8],
@@ -2368,7 +2388,7 @@ class CollaborationEngine:
             seconds_since_activity = int((now - updated_at).total_seconds())
         except (ValueError, TypeError):
             seconds_since_activity = 0
-        non_stall_statuses = {SessionStatus.COMPLETED, SessionStatus.ARCHIVED}
+        non_stall_statuses = {SessionStatus.COMPLETED, SessionStatus.ARCHIVED, SessionStatus.HUMAN_REVIEW}
         is_stalled = (
             session.status not in non_stall_statuses
             and seconds_since_activity > STALL_THRESHOLD_SECONDS

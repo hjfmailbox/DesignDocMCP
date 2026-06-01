@@ -1622,3 +1622,113 @@ class TestSessionDiagnostics:
         assert any(
             "human review with zero votes" in w["message"] for w in diag["warnings"]
         )
+
+    def test_human_review_not_stalled(self, engine):
+        """HUMAN_REVIEW 状态即使长时间无活动也不被标记为 stalled。"""
+        session = engine.create_session(title="Diag HR Not Stalled", description="Test")
+        sid = session.session_id
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.register_agent(sid, name="Agent1")
+        session = engine.store.get_session(sid)
+        session.status = SessionStatus.HUMAN_REVIEW
+        # 将 updated_at 设为 400 秒前
+        stale_time = (datetime.now(timezone.utc) - timedelta(seconds=400)).isoformat()
+        session.updated_at = stale_time
+        engine.store.update_session(session)
+
+        diag = engine.get_session_diagnostics(sid)
+        assert diag["stall_status"]["is_stalled"] is False
+        assert not any(w["category"] == "stall" for w in diag["warnings"])
+
+
+class TestSubmitIdempotency:
+    """重复提交同一 phase 的 artifact 必须被安全拒绝。"""
+
+    def _advance_to(self, engine, sid, target_phase):
+        """从当前 phase 依次 advance 到 target_phase。"""
+        from designdoc_mcp.models import PHASE_ORDER, DebatePhase
+        session = engine.store.get_session(sid)
+        current_idx = PHASE_ORDER.index(session.current_phase)
+        target_idx = PHASE_ORDER.index(target_phase)
+        for _ in range(target_idx - current_idx):
+            engine.advance_phase(sid)
+
+    def test_submit_refined_requirement_idempotent(self, engine):
+        sid = engine.create_session(title="Refine", description="Test").session_id
+        engine.register_agent(sid, name="AgentA")
+        engine.submit_requirement(sid, problem_statement="Test")
+        engine.start_clarification(sid)
+        self._advance_to(engine, sid, DebatePhase.CLARIFY_REWRITE)
+
+        engine.submit_refined_requirement(sid, "agenta", refined_statement="R1")
+        with pytest.raises(ValueError, match="already submitted a refined requirement"):
+            engine.submit_refined_requirement(sid, "agenta", refined_statement="R2")
+
+    def test_submit_challenge_idempotent(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.start_debate(sid)
+        engine.submit_proposal(sid, "agenta", architecture="A")
+        engine.submit_proposal(sid, "agentb", architecture="B")
+        self._advance_to(engine, sid, DebatePhase.CRITIC)
+
+        session = engine.store.get_session(sid)
+        proposal = [p for p in session.proposals if p.agent_id == "agentb"][0]
+        engine.submit_challenge(sid, "agenta", "agentb", proposal.proposal_id, risks=["R1"], missing_considerations=["M1"])
+        with pytest.raises(ValueError, match="already submitted a challenge"):
+            engine.submit_challenge(sid, "agenta", "agentb", proposal.proposal_id, risks=["R2"], missing_considerations=["M2"])
+
+    def test_submit_revision_idempotent(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.start_debate(sid)
+        engine.submit_proposal(sid, "agenta", architecture="A")
+        engine.submit_proposal(sid, "agentb", architecture="B")
+        self._advance_to(engine, sid, DebatePhase.REVISION)
+
+        engine.submit_revision(sid, "agenta", accepted_feedback=["F1"], rejected_feedback=[], rejection_reasons=[], changed_design="D1")
+        with pytest.raises(ValueError, match="already submitted a revision"):
+            engine.submit_revision(sid, "agenta", accepted_feedback=["F2"], rejected_feedback=[], rejection_reasons=[], changed_design="D2")
+
+    def test_submit_optimization_idempotent(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.start_debate(sid)
+        engine.submit_proposal(sid, "agenta", architecture="A")
+        engine.submit_proposal(sid, "agentb", architecture="B")
+        self._advance_to(engine, sid, DebatePhase.OPTIMIZATION)
+
+        engine.submit_optimization(sid, "agenta", description="Opt1")
+        with pytest.raises(ValueError, match="already submitted an optimization"):
+            engine.submit_optimization(sid, "agenta", description="Opt2")
+
+    def test_submit_devils_advocate_idempotent(self, engine, session_with_agents):
+        sid = session_with_agents.session_id
+        engine.submit_requirement(sid, problem_statement="Build")
+        engine.start_clarification(sid)
+        engine.force_skip_clarification(sid)
+        engine.start_debate(sid)
+        engine.submit_proposal(sid, "agenta", architecture="A")
+        engine.submit_proposal(sid, "agentb", architecture="B")
+        self._advance_to(engine, sid, DebatePhase.DEVILS_ADVOCATE)
+
+        # 确保 agenta 被指定为 devils_advocate_agent（只有一个 agent 需要提交）
+        session = engine.store.get_session(sid)
+        session.devils_advocate_agent = "agenta"
+        engine.store.update_session(session)
+
+        engine.submit_devils_advocate(sid, "agenta", failure_modes=["F1"])
+        # 第一次提交后 phase 会自动推进到 CONSENSUS，手动回退以测试 idempotency
+        session = engine.store.get_session(sid)
+        session.current_phase = DebatePhase.DEVILS_ADVOCATE
+        session.status = SessionStatus.DEVILS_ADVOCATE
+        engine.store.update_session(session)
+
+        with pytest.raises(ValueError, match="already submitted a devil's advocate"):
+            engine.submit_devils_advocate(sid, "agenta", failure_modes=["F2"])
