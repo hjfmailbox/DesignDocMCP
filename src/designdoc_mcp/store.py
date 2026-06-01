@@ -71,6 +71,13 @@ class SessionStore:
             pass
 
     def _load_all(self) -> None:
+        # Sync memory cache with disk: remove sessions whose files no longer exist
+        existing_ids = {f.stem for f in self.sessions_dir.glob("*.json")}
+        for sid in list(self._sessions.keys()):
+            if sid not in existing_ids:
+                self._sessions.pop(sid, None)
+                self._mtimes.pop(sid, None)
+
         for f in self.sessions_dir.glob("*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
@@ -83,6 +90,8 @@ class SessionStore:
     def _reload_session(self, session_id: str) -> None:
         path = self._session_path(session_id)
         if not path.exists():
+            self._sessions.pop(session_id, None)
+            self._mtimes.pop(session_id, None)
             return
         try:
             current_mtime = path.stat().st_mtime

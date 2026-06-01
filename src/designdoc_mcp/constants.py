@@ -36,6 +36,21 @@ KNOWN_PERSISTENT_CLIENTS = frozenset({"cursor", "claude_code", "atomcode", "kimi
 RUNTIME_MODE_LOOP = "persistent_worker"
 RUNTIME_MODE_STEP = "normal_worker"
 
+# Canonical client_type ← keyword matching, applied to (in priority order) the
+# agent-provided client_type, the MCP handshake clientInfo.name/title, and the
+# agent display name. First keyword hit wins, so order matters (most specific
+# first). Lets us identify the client even when the agent self-reports nothing
+# (e.g. Cursor sends clientInfo.name="Cursor"/"cursor-vscode"; Claude Code sends
+# "claude-code"). Kimi's handshake is generic ("mcp"), but its agent name
+# contains "Kimi", so name-based matching covers it.
+CLIENT_TYPE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("claude_code", ("claude code", "claude-code", "claudecode")),
+    ("atomcode", ("atomcode", "atom code", "atom-code")),
+    ("cursor", ("cursor",)),
+    ("kimi", ("kimi",)),
+    ("trae", ("trae",)),  # recognized, but NOT in KNOWN_PERSISTENT_CLIENTS → STEP
+)
+
 # Challenge / vote defaults
 DEFAULT_CONFIDENCE = 0.5
 DEFAULT_CHALLENGE_CATEGORY = "architecture"

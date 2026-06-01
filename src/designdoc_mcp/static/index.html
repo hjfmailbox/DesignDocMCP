@@ -112,6 +112,27 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
   </div>
 </div>
 
+<div class="modal-bg" x-show="showUploadModal" x-transition @click.self="showUploadModal=false">
+  <div class="modal-box" style="border-color:var(--ac)">
+    <div class="flex items-center gap-3 mb-4">
+      <i class="fas fa-upload text-2xl" style="color:var(--ac)"></i>
+      <h2 class="text-lg font-bold">Upload Requirement</h2>
+    </div>
+    <p class="text-sm mb-3" style="color:var(--t2)">Upload a requirement file for this session.</p>
+    <div class="mb-3">
+      <label class="btn btn-s text-xs cursor-pointer w-full" style="justify-content:center">
+        <i class="fas fa-file"></i> Choose File
+        <input type="file" @change="handleReqFileUpload($event)" accept=".md,.txt" class="hidden">
+      </label>
+      <p x-show="reqText" class="text-xs mt-2" style="color:var(--ok)">File loaded</p>
+    </div>
+    <div class="flex gap-2 justify-end">
+      <button @click="showUploadModal=false" class="btn btn-s">Cancel</button>
+      <button @click="submitRequirement(); showUploadModal=false" class="btn btn-p" :disabled="!reqText">Submit</button>
+    </div>
+  </div>
+</div>
+
 <nav class="flex items-center justify-between px-5 py-2.5" style="background:var(--bg1);border-bottom:1px solid var(--bd)">
   <div class="flex items-center gap-3">
     <i class="fas fa-comments" style="color:var(--ac);font-size:18px"></i>
@@ -217,7 +238,7 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
       <span class="text-xs" style="color:var(--t3)">Session ID:</span>
       <code class="text-xs px-2 py-0.5" style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--ac);font-family:monospace" x-text="s.session_id"></code>
       <button @click="copyToClipboard(s.session_id)" class="copy-btn text-xs" style="color:var(--ac)" title="Copy Session ID"><i class="fas fa-copy"></i></button>
-      <span class="text-xs" style="color:var(--t3)">→ tell agents: <code style="color:var(--ac)">/register <span x-text="s.session_id"></span></code></span>
+      <span class="text-xs" style="color:var(--t3)">→ tell agents: <code style="color:var(--ac)">/skill:dd-register <span x-text="s.session_id"></span></code></span>
     </div>
   </div>
   <div class="flex items-center gap-2 flex-shrink-0">
@@ -285,6 +306,7 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
     <button x-show="s.status==='completed'" @click="apiCall('/generate-document',{})" class="btn btn-s text-xs"><i class="fas fa-file-export"></i> Generate Doc</button>
     <button x-show="s.status==='completed'" @click="confirmArchive()" class="btn btn-s text-xs"><i class="fas fa-archive"></i> Archive</button>
     <button x-show="isInClarify" @click="apiCall('/force-skip-clarification',{})" class="btn btn-s text-xs"><i class="fas fa-forward"></i> Skip Clarification</button>
+    <button x-show="['proposal','critic','revision','optimization','devils_advocate','consensus'].includes(s.phase)&&!['completed','archived'].includes(s.status)&&s.status!=='human_review'" @click="apiCall('/request-human-review',{reason:'Forced human review from UI (recover stuck debate)'})" class="btn btn-s text-xs" style="color:var(--wn)" title="Force the debate into human review — use when a dropped agent cannot rejoin or the debate is stuck. Unblocks re-registration."><i class="fas fa-hand-paper"></i> Force Human Review</button>
     <button x-show="s.requirement&&s.status!=='archived'&&s.status!=='completed'" @click="showDeltaModal=true" class="btn btn-s text-xs"><i class="fas fa-plus-circle"></i> Add Delta</button>
     <button x-show="s.status!=='archived'" @click="confirmDelete(s.session_id, s.title)" class="btn btn-s text-xs" style="color:var(--er)"><i class="fas fa-trash"></i></button>
   </div>
@@ -322,7 +344,7 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
         <div x-show="s.agents.length===0" class="text-center py-6" style="color:var(--t3)">
           <i class="fas fa-user-slash text-2xl mb-2"></i>
           <p class="text-sm">No agents registered yet</p>
-          <p class="text-xs mt-1">Use <code style="color:var(--ac)">/register <span x-text="s.session_id"></span></code> in your agent to join</p>
+          <p class="text-xs mt-1">Use <code style="color:var(--ac)">/skill:dd-register <span x-text="s.session_id"></span></code> in your agent to join</p>
         </div>
       </div>
     </div>
@@ -826,6 +848,7 @@ function app(){
     showCreateForm:false,
     sessionFilter:'active',
     showDeltaModal:false,
+    showUploadModal:false,
     deltaText:'',
     newSession:{title:'',description:'',problem_statement:'',fileName:'',fileContent:''},
     reqText:'',

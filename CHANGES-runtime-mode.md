@@ -73,8 +73,77 @@
 ## 验证
 - `uv run pytest -q` → **137 passed**。
 
+---
+
+# 第二批：实测问题修复（同一主题的后续迭代）
+
+实测后发现 4 个问题，根因与修复如下。
+
+## 问题与根因
+
+1. **Claude Code / Cursor 退化为 STEP（应为 LOOP）**：根因是检测**依赖 Agent 自报 `client_type`**，而 Cursor 实测传了 `client_type=''`（空）。日志佐证：`name='Cursor Composer Agent', identity='', client_type=''`。
+2. **`/resume` 与 Cursor 内置命令冲突**。
+3. **掉线 Agent 无法 rejoin**：Kimi 在 critic 掉线被注销，进入 revision 后用相同 identity 重注册被拒（`Cannot register new agents during revision phase`）。根因有二：(a) rejoin 仅在传了 `agent_identity` 时生效，Kimi 没传稳定 identity；(b) 即使 `agent_id` 已在名册，阶段限制检查也排在"按 agent_id 复用"之前，导致回归 Agent 被当作新 Agent 拦截。且 **Web UI 无任何人工干预按钮**可解锁。
+4. 日志复盘（见下）。
+
+## 关键发现：MCP 握手自带客户端身份
+
+MCP `initialize` 握手携带 `clientInfo.name`，实测各客户端取值：`claude-code`、`Cursor`、`cursor-vscode`、`Trae`、以及通用的 `mcp`（Kimi 走此通用名，但其 Agent 名称含 "Kimi"）。因此**服务端可直接识别客户端，无需信任 Agent 自报**。FastMCP 3.3.1 通过 `ctx.session.client_params.clientInfo` 暴露。
+
+## 第二批改了哪些文件
+
+### `src/designdoc_mcp/constants.py`
+- 新增 `CLIENT_TYPE_KEYWORDS`：关键字→canonical client_type 的有序映射（claude_code/atomcode/cursor/kimi/trae），用于从多来源归一化识别。
+
+### `src/designdoc_mcp/engine.py`
+- 新增 `canonicalize_client_type(*candidates)`：按优先级扫描（client_type → clientInfo 提示 → name）返回 canonical client_type。
+- 新增 `CollaborationEngine._resolve_runtime_mode(client_type, force_mode)`：支持 `force_mode` 覆盖（loop/step）。
+- `register_agent` 重写（修复 #1、#3a）：
+  - 新增参数 `client_info_hint`、`force_mode`。
+  - 用 `effective_client = canonicalize_client_type(client_type, client_info_hint, name)` 做检测，不再只看自报 client_type。
+  - **重排逻辑**：先按 identity rejoin；否则算出 agent_id，若该 agent_id **已在名册（即使 inactive）则直接复用回归**（原地恢复、保留 perspective），**不受阶段限制**；只有"全新 agent_id"才施加 critic/revision 等阶段限制。错误信息也补充了"复用相同 identity/name 即可回归"的提示。
+
+### `src/designdoc_mcp/server.py`
+- `register_agent` MCP 工具：新增注入参数 `ctx: Context`（FastMCP 自动注入，已验证不出现在 input schema 中）与 `force_mode`；从 `ctx.session.client_params.clientInfo` 读取 `name/title` 作为 `client_info_hint` 传给 engine。docstring 与 `designdoc_guide` prompt 同步更新（检测来源、auto-rejoin 说明、命令前缀）。
+
+### `src/designdoc_mcp/web.py`
+- 新增 REST 端点 `POST /api/sessions/{id}/request-human-review`（修复 #3 的 UI 缺口），调用 `engine.request_human_review` 将卡死会话强制转入 HUMAN_REVIEW（之后注册解禁）。
+
+### `src/designdoc_mcp/static/index.html`
+- 会话控制栏新增 **Force Human Review** 按钮：在 debate 阶段（proposal/critic/revision/optimization/devils_advocate/consensus 且非 completed/archived/human_review）显示，用于掉线卡死时解锁。
+
+### Skills 命令前缀（修复 #2）
+- 三个 SKILL.md 的 frontmatter `name` 与内部引用统一加 `dd-` 前缀：`/dd-register`、`/dd-resume`、`/dd-deregister`（**目录名未改**，命令由 frontmatter `name` 决定）。`README.md`、`designdoc_guide` prompt 同步更新。
+- ⚠️ 若已同步 skill 到 IDE 专属目录（`.cursor/skills/` 等），需重新同步以让新命令名生效。
+
+### `tests/test_engine.py`
+- `TestRuntimeModeDetection` 增补：从 clientInfo 提示识别、从 name 识别（握手为通用 mcp 时）、`force_mode` 覆盖。
+- 新增 `TestRejoinDuringRestrictedPhase`：revision 阶段下 按 agent_id / 按 identity 均可 rejoin；全新 agent 仍被拦截。
+
+## 验证
+- `uv run pytest -q` → **152 passed**；lint clean。
+- 已验证 `register_agent` 工具 schema 隐藏 `ctx`、暴露 `force_mode`。
+
+## 第四项：本轮辩论日志复盘（session 8c68e2df8663）
+
+时间线（`logs/designdoc_mcp.log`）：
+- 17:45 cursor、kimi 注册；17:47 claude_code 注册（3 agent）。
+- 17:55 进入 critic（push `submit_challenge` ×3）。
+- 18:00–18:01 cursor、claude 提交 decision_points（critic 内）。kimi 未提交。
+- 18:10:21 **kimi 被注销**（critic 期间掉线），phase 推进到 revision（剩 2 agent）。
+- 18:10:28 / 18:11:07 / 18:13:13 kimi 反复重注册→被拒（revision 阶段）。← 本次 #3 修复点。
+- 18:11:20 cursor 因带稳定 identity（`cursor_cli_designDocMCPTest1`）成功 auto-rejoin。
+- 18:25:52 cursor 再次掉线，推进到 optimization。
+
+结论：cursor 因传了稳定 identity 能自动回归，kimi 因未传稳定 identity 且命中阶段限制排序 bug 而被拒——印证了修复方向。另注意日志为 DEBUG 级、含大量 SSE 噪声（文件已 95MB），建议生产降到 INFO 或加轮转。
+
+---
+
 ## 给后续 Agent 的注意事项
 - 要把某个客户端从 STEP 升级为 LOOP：先用能力压测验证（单次阻塞 + 连续多轮 + 无需确认），再把其 `client_type` 加入 `KNOWN_PERSISTENT_CLIENTS`。不要凭感觉加。
 - 调整轮询节奏改 `WAIT_FOR_TASK_TIMEOUT`，但不要超过最低客户端单次调用硬上限（当前 300s）。
 - 若有从 `skills/` 同步到各 IDE 专属目录（`.cursor/skills/`、`.claude/skills/` 等）的机制，新增的 `skills/resume/` 需一并纳入同步。
-- 客户端注册时应传 `client_type`（`cursor`/`claude_code`/`kimi`/`atomcode`/`generic`），否则默认按未知→STEP 处理。
+- 客户端注册时**可**传 `client_type`，但已不强制——服务端会从 MCP `clientInfo.name` + name 自动识别。新增客户端识别词在 `constants.py::CLIENT_TYPE_KEYWORDS`，新增 LOOP 能力客户端在 `KNOWN_PERSISTENT_CLIENTS`。
+- 需要手动指定模式时用 `register_agent(force_mode="loop"|"step")`。
+- 掉线重连务必复用相同 `agent_identity` 与 name；否则会生成新 agent_id（虽然现在按 agent_id 也能复用，但 name 变了 agent_id 就变）。
+- 建议将生产日志级别从 DEBUG 降到 INFO 并加文件轮转（当前 `logs/designdoc_mcp.log` 已达 95MB，SSE DEBUG 噪声为主）。

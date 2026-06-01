@@ -5,7 +5,7 @@ MCP驱动的多智能体设计文档协作系统。通过结构化辩论流程�
 ## 核心理念
 
 - **UI是控制中心**：人类在Web UI中创建会话、提交需求、观察流程、做出决策
-- **Skill极简**：Agent只需安装skill，使用 `/register` 加入，`/deregister` 退出
+- **Skill极简**：Agent只需安装skill，使用 `/dd-register` 加入，`/dd-deregister` 退出
 - **自动参与**：Agent注册后自动心跳、自动检测阶段、自动提交内容
 - **人类只做决策**：阶段自动推进，人类仅在决策点介入（通过UI操作）
 - **结构化辩论**：4阶段澄清 + 6阶段辩论，强制深度思考
@@ -23,9 +23,9 @@ MCP驱动的多智能体设计文档协作系统。通过结构化辩论流程�
 └────────────────────────────────────────────────────────────────┘
 
 ┌─ Agent（Skill）───────────────────────────────────────────────┐
-│ 1. /register  → 自动加入会话（无需参数）                       │
+│ 1. /dd-register  → 自动加入会话（无需参数）                       │
 │ 2. 每次被唤起时：heartbeat → get_phase_context → 提交内容     │
-│ 3. /deregister → 退出会话                                      │
+│ 3. /dd-deregister → 退出会话                                      │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,8 +39,8 @@ MCP驱动的多智能体设计文档协作系统。通过结构化辩论流程�
       ├─ 清晰度 ≥ 0.7 → 自动跳过澄清，直接进入辩论
       └─ 清晰度 < 0.7 → 进入4阶段澄清
            ↓
-Agent A: /register <session_id>
-Agent B: /register <session_id>
+Agent A: /dd-register <session_id>
+Agent B: /dd-register <session_id>
       ↓
 ┌─── 澄清阶段（如果需要）──────────────────────────────────────┐
 │ Agent: submit_assumptions (各Agent独立提交假设，全部完成后推进) │
@@ -139,7 +139,7 @@ uv run designdoc-mcp --transport http --port 8765
 
 #### Skill自动加载（可选便利功能）
 
-项目在 `skills/` 下包含 `register/`、`resume/`、`deregister/` 三个 SKILL.md。以下IDE打开项目时会自动加载Skill，提供 `/register`、`/resume` 和 `/deregister` 命令：
+项目在 `skills/` 下包含 `register/`、`resume/`、`deregister/` 三个 SKILL.md。以下IDE打开项目时会自动加载Skill，提供 `/dd-register`、`/dd-resume` 和 `/dd-deregister` 命令：
 
 | IDE | Skill目录 |
 |-----|----------|
@@ -176,16 +176,16 @@ IDE通过MCP配置连接到 designdoc 服务器
     ↓
 Agent调用 designdoc_guide prompt → 获取协作指南和当前会话状态
     ↓
-Agent执行 /register → 注册到会话，自动参与讨论
+Agent执行 /dd-register → 注册到会话，自动参与讨论
 ```
 
 Skill提供三个命令：
 
 | 命令 | 说明 |
 |------|------|
-| `/register` | 加入会话。无需参数——单session自动加入，多session返回列表选择。注册时自动检测运行时模式 |
-| `/resume` | （STEP 模式）推进一步。轮到该 Agent 时（UI 显示 `⏳ needs /resume`）再次运行 |
-| `/deregister` | 退出当前会话。无需参数 |
+| `/dd-register` | 加入会话。无需参数——单session自动加入，多session返回列表选择。注册时自动检测运行时模式 |
+| `/dd-resume` | （STEP 模式）推进一步。轮到该 Agent 时（UI 显示 `⏳ needs /dd-resume`）再次运行 |
+| `/dd-deregister` | 退出当前会话。无需参数 |
 
 #### 运行时模式与长时执行检测
 
@@ -194,15 +194,19 @@ Skill提供三个命令：
 | 模式 | 适用客户端 | 参与方式 |
 |------|-----------|---------|
 | `persistent_worker`（LOOP） | `cursor` / `claude_code` / `kimi` / `atomcode`（经压力测试验证） | `wait_for_task(timeout=25)` → `submit_result` 短轮询循环，全程自主 |
-| `normal_worker`（STEP） | 其余/空/`generic`/`trae` 等（保守默认） | 每次唤起只走一步（`heartbeat`→`get_phase_context`→提交），随后停下，由用户 `/resume` 重新唤醒 |
+| `normal_worker`（STEP） | 其余/`generic`/`trae` 等（保守默认） | 每次唤起只走一步（`heartbeat`→`get_phase_context`→提交），随后停下，由用户 `/dd-resume` 重新唤醒 |
 
-> 检测判据集中在 `constants.py` 的 `KNOWN_PERSISTENT_CLIENTS`；轮询时长 `WAIT_FOR_TASK_TIMEOUT` 默认 25s（建议 20~60s，务必 < 已知客户端单次调用硬上限 300s），两处均有注释，可手动调整。STEP 模式的 Agent 在 Web UI 的 Agents 页会显示 `STEP` 徽标，轮到它时显示 `⏳ needs /resume` 提示用户唤醒时机。
+> **检测来源（不依赖 Agent 自报）**：服务端综合 ① MCP 握手的 `clientInfo.name`（如 `Cursor`/`cursor-vscode`/`claude-code`/`Trae`，最权威）、② Agent 传的 `client_type`、③ Agent 名称（如 "Kimi Code CLI"，覆盖握手为通用 `mcp` 的客户端）做关键字归一化。判据集中在 `constants.py` 的 `KNOWN_PERSISTENT_CLIENTS` 与 `CLIENT_TYPE_KEYWORDS`。可用 `register_agent(force_mode="loop"|"step")` 手动覆盖。
+>
+> 轮询时长 `WAIT_FOR_TASK_TIMEOUT` 默认 25s（建议 20~60s，务必 < 已知客户端单次调用硬上限 300s），有注释可手改。STEP 模式 Agent 在 Web UI 的 Agents 页显示 `STEP` 徽标，轮到它时显示 `⏳ needs /dd-resume`。
+>
+> **掉线恢复**：断开的 Agent 复用相同 `agent_identity`/名称即可自动 rejoin（即使在 critic/revision 阶段，因为它是"已存在 Agent 回归"而非"新 Agent 加入"）。若辩论卡死（如掉线 Agent 无法回归），可在会话控制栏点击 **Force Human Review** 强制进入人工审核以解锁。
 
 ### 4. 开始协作
 
 ```
 1. [UI] 创建会话，填写标题和需求
-2. [Agent] /register <session_id>
+2. [Agent] /dd-register <session_id>
 3. [Agent] 自动参与讨论（心跳 + 阶段检测 + 内容提交）
 4. [UI] 观察流程，在需要时做出决策
 5. [UI] 查看文档，归档会话
@@ -241,7 +245,7 @@ Skill提供三个命令：
 
 ## Skill命令详解
 
-### `/register <session_id> [name] [model] [provider] [agent_identity] [client_type]`
+### `/dd-register <session_id> [name] [model] [provider] [agent_identity] [client_type]`
 
 注册到指定会话（无需参数，自动检测）。支持 **stable identity 自动 rejoin**：
 - 提供 `agent_identity` 时，如果匹配已有 agent，自动恢复（不创建新 agent）
@@ -255,10 +259,10 @@ Skill提供三个命令：
 
 示例：
 ```
-/register
+/dd-register
 ```
 
-### `/deregister`
+### `/dd-deregister`
 
 退出当前会话。
 

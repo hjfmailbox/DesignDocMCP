@@ -30,6 +30,7 @@ from .constants import (
     DEFAULT_CONFIDENCE,
     DEFAULT_MAX_ROUNDS,
     DEFAULT_MIN_ROUNDS,
+    CLIENT_TYPE_KEYWORDS,
     DEFAULT_VOTE_TYPE,
     KNOWN_PERSISTENT_CLIENTS,
     NOVELTY_THRESHOLD,
@@ -40,10 +41,33 @@ from .constants import (
 from .events import event_bus
 
 logger = logging.getLogger(__name__)
+session_events = logging.getLogger("designdoc_mcp.session")
+
+
+def canonicalize_client_type(*candidates: str) -> str:
+    """Resolve a canonical client_type from one or more free-form hints.
+
+    Scans the candidates in order (e.g. agent-provided client_type, MCP
+    clientInfo.name/title, agent display name) and returns the first canonical
+    client_type whose keyword appears. Returns "" if nothing matches.
+
+    This removes the dependency on the agent correctly self-reporting its
+    client_type: the MCP handshake clientInfo.name is authoritative for most
+    clients (Cursor / Claude Code / Trae), and the agent name covers the rest
+    (e.g. Kimi, whose handshake is the generic "mcp").
+    """
+    for raw in candidates:
+        text = (raw or "").strip().lower()
+        if not text:
+            continue
+        for canonical, keywords in CLIENT_TYPE_KEYWORDS:
+            if any(kw in text for kw in keywords):
+                return canonical
+    return ""
 
 
 def detect_runtime_mode(client_type: str) -> str:
-    """Map a client_type to its runtime mode.
+    """Map a (canonical) client_type to its runtime mode.
 
     Known-capable clients (verified by stress test) run the autonomous LOOP
     (wait_for_task/submit_result). Everything else — unknown, empty, "generic",
@@ -112,6 +136,7 @@ class CollaborationEngine:
             min_rounds=min_rounds,
             max_rounds=max_rounds,
         )
+        session_events.info("CREATE session=%s title='%s'", session.session_id, title)
         return self.store.create_session(session)
 
     def submit_requirement(
@@ -145,6 +170,16 @@ class CollaborationEngine:
         self.store.update_session(session)
         return req
 
+    @staticmethod
+    def _resolve_runtime_mode(client_type: str, force_mode: str = "") -> str:
+        """Resolve runtime_mode, honoring an explicit force_mode override."""
+        fm = (force_mode or "").strip().lower()
+        if fm in ("loop", "persistent_worker"):
+            return RUNTIME_MODE_LOOP
+        if fm in ("step", "normal_worker"):
+            return RUNTIME_MODE_STEP
+        return detect_runtime_mode(client_type)
+
     def register_agent(
         self,
         session_id: str = "",
@@ -153,6 +188,8 @@ class CollaborationEngine:
         provider: str = "",
         agent_identity: str = "",
         client_type: str = "",
+        client_info_hint: str = "",
+        force_mode: str = "",
     ) -> AgentInfo | dict:
         if not name:
             name = f"Agent-{uuid.uuid4().hex[:6]}"
@@ -178,42 +215,41 @@ class CollaborationEngine:
                 return {"action": "choose_session", "message": "Multiple active sessions found. Choose one.", "sessions": sessions_info}
         session = self._get(session_id)
 
-        # --- Auto rejoin via stable identity ---
+        if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
+            raise ValueError(
+                f"Session '{session_id}' is {session.status.value}. "
+                f"Archived or completed sessions cannot accept new agents."
+            )
+
+        # Resolve canonical client_type from ALL available signals — the agent's
+        # self-reported client_type, the MCP handshake hint (clientInfo.name),
+        # and the agent display name — so detection does not depend on the agent
+        # reporting correctly. Falls back to the raw client_type if nothing matches.
+        effective_client = canonicalize_client_type(client_type, client_info_hint, name) or (client_type or "").strip().lower()
+
+        def _restore(existing: AgentInfo, how: str) -> AgentInfo:
+            existing.name = name or existing.name
+            existing.model = model or existing.model
+            existing.provider = provider or existing.provider
+            existing.client_type = effective_client or existing.client_type
+            existing.is_active = True
+            existing.last_active_at = datetime.now(timezone.utc).isoformat()
+            existing.runtime_mode = self._resolve_runtime_mode(existing.client_type, force_mode)
+            logger.info("register_agent: rejoin (%s) → agent %s in session %s", how, existing.agent_id, session_id)
+            return existing
+
+        # --- Rejoin path 1: stable identity matches an existing agent ---
+        agent: AgentInfo | None = None
         rejoined = False
         if agent_identity:
             for a in session.agents:
                 if a.agent_identity == agent_identity:
-                    # Rejoin: restore existing agent, update metadata
-                    a.name = name
-                    a.model = model or a.model
-                    a.provider = provider or a.provider
-                    a.client_type = client_type or a.client_type
-                    a.is_active = True
-                    a.last_active_at = datetime.now(timezone.utc).isoformat()
-                    a.runtime_mode = detect_runtime_mode(a.client_type)
-                    agent = a
+                    agent = _restore(a, f"identity {agent_identity}")
                     rejoined = True
-                    logger.info("register_agent: auto-rejoin via identity %s → agent %s", agent_identity, a.agent_id)
                     break
 
         if not rejoined:
-            # New registration: check phase restrictions
-            late_registration_phases = {
-                DebatePhase.CRITIC,
-                DebatePhase.REVISION,
-                DebatePhase.OPTIMIZATION,
-                DebatePhase.DEVILS_ADVOCATE,
-                DebatePhase.CONSENSUS,
-            }
-            if session.current_phase in late_registration_phases:
-                raise ValueError(
-                    f"Cannot register new agents during {session.current_phase.value} phase. "
-                    f"Register before Proposal phase or after human review."
-                )
-            if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
-                raise ValueError(f"Cannot register agents in {session.status.value} session")
-
-            # Generate agent_id from name (+ model if provided)
+            # Compute the agent_id this registration maps to
             base_id = name.lower().replace(" ", "_")
             if model:
                 model_slug = model.lower().replace("-", "_").replace(".", "_").replace(" ", "_")
@@ -221,35 +257,43 @@ class CollaborationEngine:
             else:
                 agent_id = base_id
 
-            # Detect persistent runtime capability from client_type.
-            # Known-capable → LOOP (persistent_worker); unknown/generic → STEP (normal_worker).
-            runtime_mode = detect_runtime_mode(client_type)
-
-            agent = AgentInfo(
-                agent_id=agent_id,
-                name=name,
-                model=model,
-                provider=provider,
-                agent_identity=agent_identity or agent_id,
-                client_type=client_type,
-                runtime_mode=runtime_mode,
-            )
-
-            # Check if agent_id already exists (legacy rejoin by agent_id)
-            existing_ids = {a.agent_id for a in session.agents}
-            if agent_id in existing_ids:
-                old_perspective = ""
-                for a in session.agents:
-                    if a.agent_id == agent_id:
-                        old_perspective = a.current_perspective
-                        break
-                agent.current_perspective = old_perspective
-                session.agents = [a if a.agent_id != agent_id else agent for a in session.agents]
+            existing = next((a for a in session.agents if a.agent_id == agent_id), None)
+            if existing is not None:
+                # --- Rejoin path 2: same agent_id already in roster (even if
+                # inactive after a disconnect). This is NOT a new agent, so the
+                # late-phase registration restriction must NOT block it. ---
+                agent = _restore(existing, f"agent_id {agent_id}")
                 rejoined = True
-                logger.info("register_agent: re-registering existing agent %s in session %s", agent_id, session_id)
             else:
+                # --- Genuinely new agent: enforce phase / status restrictions ---
+                late_registration_phases = {
+                    DebatePhase.CRITIC,
+                    DebatePhase.REVISION,
+                    DebatePhase.OPTIMIZATION,
+                    DebatePhase.DEVILS_ADVOCATE,
+                    DebatePhase.CONSENSUS,
+                }
+                if session.current_phase in late_registration_phases:
+                    raise ValueError(
+                        f"Cannot register new agents during {session.current_phase.value} phase. "
+                        f"Register before Proposal phase or after human review. "
+                        f"(If you are a previously-registered agent reconnecting, reuse the SAME "
+                        f"agent_identity/name so the server recognizes you and lets you rejoin.)"
+                    )
+                if session.status in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED):
+                    raise ValueError(f"Cannot register agents in {session.status.value} session")
+
+                agent = AgentInfo(
+                    agent_id=agent_id,
+                    name=name,
+                    model=model,
+                    provider=provider,
+                    agent_identity=agent_identity or agent_id,
+                    client_type=effective_client,
+                    runtime_mode=self._resolve_runtime_mode(effective_client, force_mode),
+                )
                 session.agents.append(agent)
-                logger.info("register_agent: new agent %s added to session %s (total: %d)", agent_id, session_id, len(session.agents))
+                logger.info("register_agent: new agent %s added to session %s (total: %d, mode=%s, client=%r)", agent_id, session_id, len(session.agents), agent.runtime_mode, effective_client)
 
         # Tag the agent with rejoin status for the caller
         agent._rejoined = rejoined
@@ -259,6 +303,10 @@ class CollaborationEngine:
         self._add_event(session, EventType.SYSTEM_EVENT, agent.agent_id, content=f"Agent {name}{model_info} {action_word}")
         self.store.update_session(session)
         logger.info("register_agent: session updated and persisted, agents in session: %s", [a.agent_id for a in session.agents])
+        session_events.info(
+            "REGISTER session=%s agent=%s name='%s' mode=%s rejoined=%s",
+            session_id, agent.agent_id, name, agent.runtime_mode, rejoined,
+        )
         return agent
 
     def deregister_agent(self, session_id: str, agent_id: str) -> dict:
@@ -276,6 +324,7 @@ class CollaborationEngine:
         self._add_event(session, EventType.SYSTEM_EVENT, agent_id, content=f"Agent {agent.name} deregistered")
         self.store.update_session(session)
         logger.info("deregister_agent: agent %s deregistered from session %s", agent_id, session_id)
+        session_events.info("DEREGISTER session=%s agent=%s", session_id, agent_id)
         # Check if phase completion is affected
         self._check_phase_completion(session, force_active_only=True)
         return {"action": "deregistered", "agent_id": agent_id, "session_id": session_id}
@@ -304,6 +353,7 @@ class CollaborationEngine:
         session.clarify_round = 1
         self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Clarification phase started - identify assumptions")
         self.store.update_session(session)
+        self._push_tasks_for_phase(session)
         return {
             "session_id": session_id,
             "phase": DebatePhase.CLARIFY_IDENTIFY.value,
@@ -354,6 +404,7 @@ class CollaborationEngine:
             content=f"Clarification skipped (clarity_score={session.requirement.clarity_score:.2f} >= {CLARITY_THRESHOLD}). Direct to PROPOSAL.",
         )
         self.store.update_session(session)
+        self._push_tasks_for_phase(session)
         return {
             "session_id": session_id,
             "phase": DebatePhase.PROPOSAL.value,
@@ -1238,6 +1289,10 @@ class CollaborationEngine:
 
         self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Phase advanced to {next_phase.value}")
         self.store.update_session(session)
+        session_events.info(
+            "PHASE_ADVANCE session=%s %s -> %s round=%d",
+            session_id, PHASE_ORDER[current_idx].value, next_phase.value, session.current_round,
+        )
 
         return {
             "session_id": session_id,
@@ -1257,6 +1312,7 @@ class CollaborationEngine:
 
         self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Advanced to round {session.current_round}")
         self.store.update_session(session)
+        session_events.info("ROUND_ADVANCE session=%s round=%d", session_id, session.current_round)
 
         if session.current_round >= session.max_rounds:
             session.status = SessionStatus.HUMAN_REVIEW
@@ -1338,6 +1394,7 @@ class CollaborationEngine:
         session.completed_at = datetime.now(timezone.utc).isoformat()
         self._add_event(session, EventType.HUMAN_DECISION, approver, content=f"Approved: {comment}")
         self.store.update_session(session)
+        session_events.info("COMPLETE session=%s reason=human_approve approver=%s", session_id, approver)
 
     def human_reject(self, session_id: str, approver: str, reason: str) -> None:
         session = self._get(session_id)
@@ -1361,6 +1418,7 @@ class CollaborationEngine:
         session.completed_at = datetime.now(timezone.utc).isoformat()
         self._add_event(session, EventType.HUMAN_DECISION, approver, content=f"Override decision: {decision}. Rationale: {rationale}")
         self.store.update_session(session)
+        session_events.info("COMPLETE session=%s reason=human_override approver=%s", session_id, approver)
 
     def submit_human_vote(self, session_id: str, approver: str, vote_type: str, comment: str = "") -> dict[str, Any]:
         session = self._get(session_id)
@@ -1382,6 +1440,7 @@ class CollaborationEngine:
             session.status = SessionStatus.COMPLETED
             session.completed_at = datetime.now(timezone.utc).isoformat()
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Human review completed by majority vote ({agree_count}/{total})")
+            session_events.info("COMPLETE session=%s reason=human_majority votes=%d/%d", session_id, agree_count, total)
         self.store.update_session(session)
         return {
             "vote_id": vote.vote_id,
@@ -1396,6 +1455,7 @@ class CollaborationEngine:
             raise ValueError("Only completed sessions can be archived")
         archive_path = self.store.archive_session(session_id)
         self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Session archived and working data cleaned up")
+        session_events.info("ARCHIVE session=%s", session_id)
         return {
             "session_id": session_id,
             "archive_path": str(archive_path) if archive_path else None,
@@ -1947,6 +2007,7 @@ class CollaborationEngine:
                 session.status = SessionStatus.HUMAN_REVIEW
                 self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Too few active agents for consensus, escalated to human review")
                 self.store.update_session(session)
+                session_events.info("HUMAN_REVIEW session=%s reason=too_few_agents", session.session_id)
                 return
             if len(round_votes) >= use_count and use_count > 0:
                 self._check_consensus(session)
@@ -1963,6 +2024,7 @@ class CollaborationEngine:
             session.metadata["human_review_reason"] = "All refined requirements submitted. Human must approve one before proceeding to PROPOSAL."
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content="All refined requirements submitted, waiting for human approval")
             self.store.update_session(session)
+            session_events.info("HUMAN_REVIEW session=%s reason=clarify_rewrite_complete", session.session_id)
             return
 
         current_idx = PHASE_ORDER.index(session.current_phase)
@@ -1989,6 +2051,10 @@ class CollaborationEngine:
 
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Auto-advanced to {next_phase.value}")
             self.store.update_session(session)
+            session_events.info(
+                "PHASE_AUTO_ADVANCE session=%s %s -> %s round=%d",
+                session.session_id, PHASE_ORDER[current_idx].value, next_phase.value, session.current_round,
+            )
 
             # 为新阶段的所有活跃 agent 创建任务
             self._push_tasks_for_phase(session)
@@ -2007,18 +2073,22 @@ class CollaborationEngine:
             session.status = SessionStatus.COMPLETED
             session.completed_at = datetime.now(timezone.utc).isoformat()
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Full consensus reached!")
+            session_events.info("COMPLETE session=%s reason=consensus_full", session.session_id)
         elif agrees > 0 and (disagrees + needs_clarification) == 0:
             session.status = SessionStatus.COMPLETED
             session.completed_at = datetime.now(timezone.utc).isoformat()
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content=f"Consensus reached with {abstains} abstention(s)")
+            session_events.info("COMPLETE session=%s reason=consensus_with_abstentions", session.session_id)
         elif disagrees >= CONSENSUS_SEVERE_DISAGREEMENT_THRESHOLD or needs_clarification >= CONSENSUS_SEVERE_DISAGREEMENT_THRESHOLD:
             session.status = SessionStatus.HUMAN_REVIEW
             session.metadata["human_review_reason"] = f"Consensus failed: {disagrees} disagree, {needs_clarification} need clarification"
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Consensus failed, moved to human review")
+            session_events.info("HUMAN_REVIEW session=%s reason=consensus_failed", session.session_id)
         elif (disagrees + needs_clarification) >= CONSENSUS_PARTIAL_AGREEMENT_MIN and agrees >= CONSENSUS_PARTIAL_AGREEMENT_MIN:
             session.status = SessionStatus.HUMAN_REVIEW
             session.metadata["human_review_reason"] = f"Partial consensus: {agrees} agree, {disagrees} disagree, {needs_clarification} need clarification, {abstains} abstain"
             self._add_event(session, EventType.SYSTEM_EVENT, "system", content="Partial consensus, moved to human review")
+            session_events.info("HUMAN_REVIEW session=%s reason=partial_consensus", session.session_id)
 
         self.store.update_session(session)
 

@@ -474,6 +474,70 @@ class TestRuntimeModeDetection:
         assert getattr(r2, "_rejoined", False) is True
         assert r2.runtime_mode == "persistent_worker"
 
+    def test_detect_from_client_info_hint_when_client_type_empty(self, engine):
+        """Cursor sends empty client_type but clientInfo.name='Cursor' → LOOP."""
+        session = engine.create_session(title="RM", description="Test")
+        r = engine.register_agent(session_id=session.session_id, name="Cursor Composer Agent",
+                                  client_type="", client_info_hint="Cursor 1.0.0")
+        assert r.client_type == "cursor"
+        assert r.runtime_mode == "persistent_worker"
+
+    def test_detect_from_name_when_handshake_generic(self, engine):
+        """Kimi handshake is generic 'mcp', but its name reveals it → LOOP."""
+        session = engine.create_session(title="RM", description="Test")
+        r = engine.register_agent(session_id=session.session_id, name="Kimi Code CLI",
+                                  client_type="", client_info_hint="mcp 0.1.0")
+        assert r.client_type == "kimi"
+        assert r.runtime_mode == "persistent_worker"
+
+    def test_force_mode_override(self, engine):
+        session = engine.create_session(title="RM", description="Test")
+        sid = session.session_id
+        r1 = engine.register_agent(session_id=sid, name="X", client_type="generic", force_mode="loop")
+        assert r1.runtime_mode == "persistent_worker"
+        r2 = engine.register_agent(session_id=sid, name="Y", client_type="cursor", force_mode="step")
+        assert r2.runtime_mode == "normal_worker"
+
+
+class TestRejoinDuringRestrictedPhase:
+    """A dropped/inactive agent must be able to rejoin even during critic/revision."""
+
+    def _to_revision(self, engine, sid):
+        s = engine._get(sid)
+        s.current_phase = DebatePhase.REVISION
+        s.status = SessionStatus.REVISION
+        engine.store.update_session(s)
+
+    def test_existing_agent_rejoins_by_agent_id_in_revision(self, engine):
+        session = engine.create_session(title="R", description="Test")
+        sid = session.session_id
+        engine.register_agent(session_id=sid, name="Kimi Code CLI", model="k2", client_type="kimi")
+        engine.deregister_agent(sid, "kimi_code_cli__k2")
+        self._to_revision(engine, sid)
+        # Re-register with the SAME name/model (no agent_identity passed) → rejoin, not blocked
+        r = engine.register_agent(session_id=sid, name="Kimi Code CLI", model="k2", client_type="kimi")
+        assert getattr(r, "_rejoined", False) is True
+        assert r.is_active is True
+        assert len([a for a in engine._get(sid).agents]) == 1
+
+    def test_existing_agent_rejoins_by_identity_in_revision(self, engine):
+        session = engine.create_session(title="R", description="Test")
+        sid = session.session_id
+        engine.register_agent(session_id=sid, name="Cursor", agent_identity="cur_1", client_type="cursor")
+        engine.deregister_agent(sid, "cursor")
+        self._to_revision(engine, sid)
+        r = engine.register_agent(session_id=sid, name="Cursor", agent_identity="cur_1", client_type="cursor")
+        assert getattr(r, "_rejoined", False) is True
+        assert r.is_active is True
+
+    def test_genuinely_new_agent_still_blocked_in_revision(self, engine):
+        session = engine.create_session(title="R", description="Test")
+        sid = session.session_id
+        engine.register_agent(session_id=sid, name="Existing", client_type="cursor")
+        self._to_revision(engine, sid)
+        with pytest.raises(ValueError, match="Cannot register new agents"):
+            engine.register_agent(session_id=sid, name="Brand New Agent", client_type="cursor")
+
 
 class TestDecisionPoints:
     def test_submit_decision_points(self, engine, session_with_agents):
