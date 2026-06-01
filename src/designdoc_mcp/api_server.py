@@ -84,11 +84,11 @@ async def list_sessions(body: dict[str, Any] | None = None) -> list[dict[str, An
 
 @api_app.post("/api/v1/get_session")
 async def get_session(body: dict[str, Any]) -> dict[str, Any]:
-    engine = _get_engine()
-    result = engine.get_session(body["session_id"])
-    if isinstance(result, dict) and "error" in result:
-        raise HTTPException(status_code=404, detail=result["error"])
-    return result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+    store = _get_store()
+    result = store.get_session(body["session_id"])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return _serialize(result)
 
 
 @api_app.post("/api/v1/delete_session")
