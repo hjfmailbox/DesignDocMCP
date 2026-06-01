@@ -362,6 +362,164 @@ func RegisterAllTools(s *mcp.Server, pc *proxy.Client) {
 			"session_id": map[string]any{"type": "string", "description": "Session ID"},
 		}, []string{"session_id"}),
 	}, makeProxyHandler(pc, "/api/v1/archive_session"))
+
+	// Missing tools (added during hybrid refactor audit)
+	s.AddTool(&mcp.Tool{
+		Name:        "advance_phase",
+		Description: "Advance the session to the next phase.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/advance_phase"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "advance_round",
+		Description: "Advance the session to the next round.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/advance_round"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "approve_refined_requirement",
+		Description: "Approve a refined requirement by its refine_id.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"refine_id":  map[string]any{"type": "string", "description": "Refine ID"},
+		}, []string{"session_id", "refine_id"}),
+	}, makeProxyHandler(pc, "/api/v1/approve_refined_requirement"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "bulk_resolve_decision_points",
+		Description: "Bulk-resolve decision points using a strategy (majority, unanimous, etc.).",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"strategy":   map[string]any{"type": "string", "description": "Resolution strategy (default: majority)"},
+			"preview":    map[string]any{"type": "boolean", "description": "Preview only, do not apply (default: false)"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/bulk_resolve_decision_points"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "compare_sessions",
+		Description: "Compare two sessions and return differences.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id_a": map[string]any{"type": "string", "description": "First session ID"},
+			"session_id_b": map[string]any{"type": "string", "description": "Second session ID"},
+		}, []string{"session_id_a", "session_id_b"}),
+	}, makeProxyHandler(pc, "/api/v1/compare_sessions"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "get_merged_assumptions",
+		Description: "Get merged assumptions for a session.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/get_merged_assumptions"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "get_pending_questions",
+		Description: "Get pending questions for a session.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/get_pending_questions"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "raise_question",
+		Description: "Raise a question during a session.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"agent_id":   map[string]any{"type": "string", "description": "Agent ID"},
+			"question":   map[string]any{"type": "string", "description": "Question text"},
+			"options":    map[string]any{"type": "array", "description": "Question options (optional)"},
+		}, []string{"session_id", "agent_id", "question"}),
+	}, makeProxyHandler(pc, "/api/v1/raise_question"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "resolve_decision_point",
+		Description: "Resolve a decision point with a choice.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id":  map[string]any{"type": "string", "description": "Session ID"},
+			"decision_id": map[string]any{"type": "string", "description": "Decision ID"},
+			"choice":      map[string]any{"type": "string", "description": "Selected option ID (optional)"},
+			"custom":      map[string]any{"type": "string", "description": "Custom input (optional)"},
+		}, []string{"session_id", "decision_id"}),
+	}, makeProxyHandler(pc, "/api/v1/resolve_decision_point"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "resolve_question",
+		Description: "Resolve a pending question with a human choice.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id":   map[string]any{"type": "string", "description": "Session ID"},
+			"question_id":  map[string]any{"type": "string", "description": "Question ID"},
+			"human_choice": map[string]any{"type": "string", "description": "Selected choice"},
+		}, []string{"session_id", "question_id", "human_choice"}),
+	}, makeProxyHandler(pc, "/api/v1/resolve_question"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "revert_to_event",
+		Description: "Revert session state to a specific event.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"event_id":   map[string]any{"type": "string", "description": "Event ID to revert to"},
+		}, []string{"session_id", "event_id"}),
+	}, makeProxyHandler(pc, "/api/v1/revert_to_event"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "review_assumptions",
+		Description: "Review assumptions with human choices.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"choices":    map[string]any{"type": "array", "description": "List of assumption choices"},
+		}, []string{"session_id", "choices"}),
+	}, makeProxyHandler(pc, "/api/v1/review_assumptions"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "submit_decision_points",
+		Description: "Submit decision points for a session.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id":     map[string]any{"type": "string", "description": "Session ID"},
+			"agent_id":       map[string]any{"type": "string", "description": "Agent ID"},
+			"decision_points": map[string]any{"type": "array", "description": "Decision points list"},
+		}, []string{"session_id", "agent_id", "decision_points"}),
+	}, makeProxyHandler(pc, "/api/v1/submit_decision_points"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "submit_human_vote",
+		Description: "Submit a human vote.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"approver":   map[string]any{"type": "string", "description": "Human reviewer name"},
+			"vote_type":  map[string]any{"type": "string", "description": "Vote type"},
+			"comment":    map[string]any{"type": "string", "description": "Comment (optional)"},
+		}, []string{"session_id", "approver", "vote_type"}),
+	}, makeProxyHandler(pc, "/api/v1/submit_human_vote"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "supplement_assumption_options",
+		Description: "Supplement assumption options during clarification.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+			"agent_id":   map[string]any{"type": "string", "description": "Agent ID"},
+			"supplements": map[string]any{"type": "array", "description": "Supplements list"},
+		}, []string{"session_id", "agent_id", "supplements"}),
+	}, makeProxyHandler(pc, "/api/v1/supplement_assumption_options"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "generate_design_document_html",
+		Description: "Generate an HTML design document for a completed session.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/generate_design_document_html"))
+
+	s.AddTool(&mcp.Tool{
+		Name:        "generate_design_document_json",
+		Description: "Generate a JSON design document for a completed session.",
+		InputSchema: objectSchema(map[string]any{
+			"session_id": map[string]any{"type": "string", "description": "Session ID"},
+		}, []string{"session_id"}),
+	}, makeProxyHandler(pc, "/api/v1/generate_design_document_json"))
 }
 
 // makeProxyHandler creates a generic MCP ToolHandler that forwards arguments

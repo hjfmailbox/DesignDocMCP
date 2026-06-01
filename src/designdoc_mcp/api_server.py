@@ -23,6 +23,13 @@ def _serialize(obj: Any) -> Any:
     return obj
 
 
+def _serialize_list(obj: Any) -> Any:
+    """Serialize a list of Pydantic models."""
+    if isinstance(obj, list):
+        return [_serialize(item) for item in obj]
+    return _serialize(obj)
+
+
 def _get_store() -> SessionStore:
     global _store
     if _store is None:
@@ -366,6 +373,154 @@ async def resume_session(body: dict[str, Any]) -> dict[str, Any]:
 async def archive_session(body: dict[str, Any]) -> dict[str, Any]:
     engine = _get_engine()
     return engine.archive_session(body["session_id"])
+
+
+# ---------------------------------------------------------------------------
+# Missing endpoints (added during hybrid refactor audit)
+# ---------------------------------------------------------------------------
+@api_app.post("/api/v1/advance_phase")
+async def advance_phase(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.advance_phase(body["session_id"])
+
+
+@api_app.post("/api/v1/advance_round")
+async def advance_round(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.advance_round(body["session_id"])
+
+
+@api_app.post("/api/v1/approve_refined_requirement")
+async def approve_refined_requirement(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return _serialize(engine.approve_refined_requirement(body["session_id"], body["refine_id"]))
+
+
+@api_app.post("/api/v1/bulk_resolve_decision_points")
+async def bulk_resolve_decision_points(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.bulk_resolve_decision_points(
+        body["session_id"],
+        body.get("strategy", "majority"),
+        body.get("preview", False),
+    )
+
+
+@api_app.post("/api/v1/compare_sessions")
+async def compare_sessions(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.compare_sessions(body["session_id_a"], body["session_id_b"])
+
+
+@api_app.post("/api/v1/get_merged_assumptions")
+async def get_merged_assumptions(body: dict[str, Any]) -> list[dict[str, Any]]:
+    engine = _get_engine()
+    return _serialize_list(engine.get_merged_assumptions(body["session_id"]))
+
+
+@api_app.post("/api/v1/get_pending_questions")
+async def get_pending_questions(body: dict[str, Any]) -> list[dict[str, Any]]:
+    engine = _get_engine()
+    return _serialize_list(engine.get_pending_questions(body["session_id"]))
+
+
+@api_app.post("/api/v1/raise_question")
+async def raise_question(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return _serialize(engine.raise_question(
+        body["session_id"],
+        body["agent_id"],
+        body["question"],
+        body.get("options"),
+    ))
+
+
+@api_app.post("/api/v1/resolve_decision_point")
+async def resolve_decision_point(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.resolve_decision_point(
+        body["session_id"],
+        body["decision_id"],
+        body.get("choice", ""),
+        body.get("custom", ""),
+    )
+
+
+@api_app.post("/api/v1/resolve_question")
+async def resolve_question(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    engine.resolve_question(body["session_id"], body["question_id"], body["human_choice"])
+    return {"ok": True}
+
+
+@api_app.post("/api/v1/revert_to_event")
+async def revert_to_event(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.revert_to_event(body["session_id"], body["event_id"])
+
+
+@api_app.post("/api/v1/review_assumptions")
+async def review_assumptions(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    engine.review_assumptions(body["session_id"], body["choices"])
+    return {"ok": True}
+
+
+@api_app.post("/api/v1/submit_decision_points")
+async def submit_decision_points(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.submit_decision_points(
+        body["session_id"], body["agent_id"], body["decision_points"]
+    )
+
+
+@api_app.post("/api/v1/submit_human_vote")
+async def submit_human_vote(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    return engine.submit_human_vote(
+        body["session_id"], body["approver"], body["vote_type"], body.get("comment", "")
+    )
+
+
+@api_app.post("/api/v1/supplement_assumption_options")
+async def supplement_assumption_options(body: dict[str, Any]) -> dict[str, Any]:
+    engine = _get_engine()
+    engine.supplement_assumption_options(
+        body["session_id"], body["agent_id"], body["supplements"]
+    )
+    return {"ok": True}
+
+
+@api_app.post("/api/v1/generate_design_document_html")
+async def generate_design_document_html(body: dict[str, Any]) -> dict[str, Any]:
+    from .document import generate_design_document_html as _html
+
+    store = _get_store()
+    session = store.get_session(body["session_id"])
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Session is in '{session.status.value}' status. Complete the debate before generating the design document.",
+        )
+    return {"document": _html(session)}
+
+
+@api_app.post("/api/v1/generate_design_document_json")
+async def generate_design_document_json(body: dict[str, Any]) -> dict[str, Any]:
+    from .document import generate_design_document_json as _json
+
+    store = _get_store()
+    session = store.get_session(body["session_id"])
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Session is in '{session.status.value}' status. Complete the debate before generating the design document.",
+        )
+    return {"document": _json(session)}
 
 
 def main() -> None:
