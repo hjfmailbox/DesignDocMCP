@@ -139,7 +139,7 @@ uv run designdoc-mcp --transport http --port 8765
 
 #### Skill自动加载（可选便利功能）
 
-项目包含 `.agents/skills/register/SKILL.md` 和 `.agents/skills/deregister/SKILL.md`。以下IDE打开项目时会自动加载Skill，提供 `/register` 和 `/deregister` 命令：
+项目在 `skills/` 下包含 `register/`、`resume/`、`deregister/` 三个 SKILL.md。以下IDE打开项目时会自动加载Skill，提供 `/register`、`/resume` 和 `/deregister` 命令：
 
 | IDE | Skill目录 |
 |-----|----------|
@@ -179,12 +179,24 @@ Agent调用 designdoc_guide prompt → 获取协作指南和当前会话状态
 Agent执行 /register → 注册到会话，自动参与讨论
 ```
 
-Skill提供两个命令：
+Skill提供三个命令：
 
 | 命令 | 说明 |
 |------|------|
-| `/register` | 加入会话。无需参数——单session自动加入，多session返回列表选择 |
+| `/register` | 加入会话。无需参数——单session自动加入，多session返回列表选择。注册时自动检测运行时模式 |
+| `/resume` | （STEP 模式）推进一步。轮到该 Agent 时（UI 显示 `⏳ needs /resume`）再次运行 |
 | `/deregister` | 退出当前会话。无需参数 |
+
+#### 运行时模式与长时执行检测
+
+不同客户端能否"长时间自主循环不断开"差异很大，注册时服务器根据 `client_type` 自动判定 `runtime_mode`：
+
+| 模式 | 适用客户端 | 参与方式 |
+|------|-----------|---------|
+| `persistent_worker`（LOOP） | `cursor` / `claude_code` / `kimi` / `atomcode`（经压力测试验证） | `wait_for_task(timeout=25)` → `submit_result` 短轮询循环，全程自主 |
+| `normal_worker`（STEP） | 其余/空/`generic`/`trae` 等（保守默认） | 每次唤起只走一步（`heartbeat`→`get_phase_context`→提交），随后停下，由用户 `/resume` 重新唤醒 |
+
+> 检测判据集中在 `constants.py` 的 `KNOWN_PERSISTENT_CLIENTS`；轮询时长 `WAIT_FOR_TASK_TIMEOUT` 默认 25s（建议 20~60s，务必 < 已知客户端单次调用硬上限 300s），两处均有注释，可手动调整。STEP 模式的 Agent 在 Web UI 的 Agents 页会显示 `STEP` 徽标，轮到它时显示 `⏳ needs /resume` 提示用户唤醒时机。
 
 ### 4. 开始协作
 

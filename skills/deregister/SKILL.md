@@ -10,7 +10,9 @@ Leave the current collaboration session.
 ## How It Works
 
 1. Call `deregister_agent(session_id, agent_id)` to mark yourself as inactive
-2. Stop the auto-participation loop (wait_for_task / submit_result)
+2. Stop participating:
+   - LOOP mode (`persistent_worker`): break out of the `wait_for_task` / `submit_result` loop
+   - STEP mode (`normal_worker`): simply stop; do not run `/resume` again
 3. Inform the user you have left the session
 
 ## After Deregistration

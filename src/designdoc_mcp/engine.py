@@ -31,12 +31,26 @@ from .constants import (
     DEFAULT_MAX_ROUNDS,
     DEFAULT_MIN_ROUNDS,
     DEFAULT_VOTE_TYPE,
+    KNOWN_PERSISTENT_CLIENTS,
     NOVELTY_THRESHOLD,
+    RUNTIME_MODE_LOOP,
+    RUNTIME_MODE_STEP,
     TASK_POLL_TIMEOUT,
 )
 from .events import event_bus
 
 logger = logging.getLogger(__name__)
+
+
+def detect_runtime_mode(client_type: str) -> str:
+    """Map a client_type to its runtime mode.
+
+    Known-capable clients (verified by stress test) run the autonomous LOOP
+    (wait_for_task/submit_result). Everything else — unknown, empty, "generic",
+    "trae", etc. — defaults to STEP mode (heartbeat/get_phase_context/submit_*
+    once per invocation, pumped manually via /resume). See skills/register/SKILL.md.
+    """
+    return RUNTIME_MODE_LOOP if (client_type or "").strip().lower() in KNOWN_PERSISTENT_CLIENTS else RUNTIME_MODE_STEP
 
 from .models import (
     ASSUMPTION_DIMENSIONS,
@@ -176,7 +190,7 @@ class CollaborationEngine:
                     a.client_type = client_type or a.client_type
                     a.is_active = True
                     a.last_active_at = datetime.now(timezone.utc).isoformat()
-                    a.runtime_mode = "persistent_worker"
+                    a.runtime_mode = detect_runtime_mode(a.client_type)
                     agent = a
                     rejoined = True
                     logger.info("register_agent: auto-rejoin via identity %s → agent %s", agent_identity, a.agent_id)
@@ -207,10 +221,9 @@ class CollaborationEngine:
             else:
                 agent_id = base_id
 
-            # Detect persistent capability
-            runtime_mode = "persistent_worker"
-            if client_type in ("cursor", "claude_code", "atomcode"):
-                runtime_mode = "persistent_worker"
+            # Detect persistent runtime capability from client_type.
+            # Known-capable → LOOP (persistent_worker); unknown/generic → STEP (normal_worker).
+            runtime_mode = detect_runtime_mode(client_type)
 
             agent = AgentInfo(
                 agent_id=agent_id,

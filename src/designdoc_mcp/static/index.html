@@ -307,12 +307,14 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
                   <span class="font-medium text-sm" x-text="a.name"></span>
                   <span x-show="a.model" class="text-xs" style="color:var(--t3)" x-text="'('+a.model+')'"></span>
                   <span x-show="a.provider" class="badge b-ph text-xs" x-text="a.provider"></span>
+                  <span x-show="a.runtime_mode==='normal_worker'" class="badge b-ph text-xs" title="STEP mode: this client cannot hold a long loop and must be pumped manually with /resume">STEP</span>
                 </div>
                 <div class="flex items-center gap-2 mt-0.5">
                   <span x-show="a.perspective" class="badge b-ac text-xs" x-text="a.perspective"></span>
                   <span class="text-xs" style="color:var(--t3)" x-text="a.is_active?'Active · '+a.last_active_ago:'Offline · '+a.last_active_ago"></span>
                 </div>
               </div>
+              <span x-show="a.runtime_mode==='normal_worker'&&a.is_active&&!['clarify_review','human_review'].includes(s.phase)&&!['completed','archived','created'].includes(s.status)" class="badge b-wn text-xs" title="It may be this agent's turn. Run /resume in the agent to advance one step."><i class="fas fa-hourglass-half"></i> needs /resume</span>
               <span x-show="!a.is_active" class="badge b-er text-xs">OFFLINE</span>
             </div>
           </div>

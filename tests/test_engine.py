@@ -452,6 +452,29 @@ class TestAutoRejoin:
         assert r2.current_perspective == "scalability"
 
 
+class TestRuntimeModeDetection:
+    @pytest.mark.parametrize("client_type", ["cursor", "claude_code", "kimi", "atomcode", "CURSOR", " Cursor "])
+    def test_known_clients_are_loop(self, engine, client_type):
+        session = engine.create_session(title="RM", description="Test")
+        r = engine.register_agent(session_id=session.session_id, name="A", agent_identity=f"id_{client_type}", client_type=client_type)
+        assert r.runtime_mode == "persistent_worker"
+
+    @pytest.mark.parametrize("client_type", ["", "generic", "trae", "unknown_cli"])
+    def test_unknown_clients_are_step(self, engine, client_type):
+        session = engine.create_session(title="RM", description="Test")
+        r = engine.register_agent(session_id=session.session_id, name="A", agent_identity=f"id_{client_type or 'empty'}", client_type=client_type)
+        assert r.runtime_mode == "normal_worker"
+
+    def test_rejoin_recomputes_mode_from_client(self, engine):
+        session = engine.create_session(title="RM", description="Test")
+        sid = session.session_id
+        r1 = engine.register_agent(session_id=sid, name="A", agent_identity="stable", client_type="trae")
+        assert r1.runtime_mode == "normal_worker"
+        r2 = engine.register_agent(session_id=sid, name="A", agent_identity="stable", client_type="cursor")
+        assert getattr(r2, "_rejoined", False) is True
+        assert r2.runtime_mode == "persistent_worker"
+
+
 class TestDecisionPoints:
     def test_submit_decision_points(self, engine, session_with_agents):
         sid = session_with_agents.session_id

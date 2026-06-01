@@ -1452,17 +1452,19 @@ You are connected to a DesignDoc MCP server for multi-agent design document coll
 
 ## Quick Start
 1. Check active sessions: read resource `designdoc://active-session`
-2. Register to a session: call MCP tool `register_agent` with no parameters (auto-detects session and your info)
-3. Save the returned `session_id` and `agent_id`
-4. Each time you are prompted:
-   - Call MCP tool `heartbeat(session_id, agent_id)`
-   - Call MCP tool `get_phase_context(session_id, agent_id)`
-   - Submit content for the current phase using the appropriate MCP tool
+2. Register: call MCP tool `register_agent` (pass `client_type` so the server can detect your runtime mode; other params auto-detected)
+3. Save the returned `session_id`, `agent_id`, and **`runtime_mode`**
+4. Participate according to `runtime_mode`:
+   - **`persistent_worker` (LOOP)**: run a `wait_for_task(timeout=25)` → `submit_result` loop continuously (short poll; do NOT use a single long block). For clients that can sustain a long autonomous turn.
+   - **`normal_worker` (STEP)**: do ONE step per invocation — `heartbeat` → `get_phase_context` → submit the current phase's tool → stop and tell the user to run `/resume` when it's your turn again. For clients that cannot hold a long loop. Do NOT fake a loop.
 
-**IMPORTANT**: During "wait" phases (clarify_review, human_review), you MUST still call `heartbeat` periodically (every 2-3 minutes) to prevent being marked as inactive (5-minute timeout). When the phase changes, `get_phase_context` will return the new phase.
+Detection is server-side from `client_type`. Known LOOP-capable: `cursor`, `claude_code`, `kimi`, `atomcode`. Anything else (incl. empty / `generic` / `trae`) → STEP mode.
+
+**IMPORTANT**: During "wait" phases (clarify_review, human_review), keep your heartbeat alive — LOOP mode does this naturally via short-poll `wait_for_task`; STEP mode just waits for the next `/resume`. The 5-minute inactivity timeout marks silent agents inactive.
 
 ## Commands
-- `/register` - Register to a session (auto-detects session and your info)
+- `/register` - Register to a session (auto-detects session + runtime mode)
+- `/resume` - (STEP mode) advance one step; re-run when it's your turn again
 - `/deregister` - Leave the current session
 
 ## Phase Actions

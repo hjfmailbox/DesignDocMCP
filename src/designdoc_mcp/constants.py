@@ -18,10 +18,23 @@ ASSUMPTION_SIMILARITY_THRESHOLD = 0.5
 
 # Timeouts (seconds)
 TASK_POLL_TIMEOUT = 0.1
-WAIT_FOR_TASK_TIMEOUT = 300
+# Default blocking duration for wait_for_task (LOOP / persistent_worker mode).
+# 建议范围: 20~60s。务必保持 < 已知客户端的单次工具调用硬上限(Kimi/AtomCode = 300s)，
+# 否则在这些客户端上单次阻塞会被强制 kill，导致循环静默中断。
+# 实时性要求低时可调大以降低请求量；要更稳可保持 25s。可手动修改此值。
+WAIT_FOR_TASK_TIMEOUT = 25
 WAIT_FOR_TASK_MIN_TIMEOUT = 1
 WAIT_FOR_TASK_MAX_TIMEOUT = 600
 SSE_KEEPALIVE_SECONDS = 30
+
+# Runtime capability detection (see skills/register/SKILL.md).
+# Clients verified to sustain a long autonomous tool-call loop without user
+# confirmation, tool-call-count caps, or turn-duration caps → LOOP mode.
+# 经压力测试确认支持长时自主循环的客户端 → persistent_worker(LOOP) 模式。
+# 不在此集合内的客户端(含空/generic/trae 等) → normal_worker(STEP) 模式 + /resume 手动泵。
+KNOWN_PERSISTENT_CLIENTS = frozenset({"cursor", "claude_code", "atomcode", "kimi"})
+RUNTIME_MODE_LOOP = "persistent_worker"
+RUNTIME_MODE_STEP = "normal_worker"
 
 # Challenge / vote defaults
 DEFAULT_CONFIDENCE = 0.5
