@@ -5,30 +5,26 @@ Last updated by /dev-save on 2026-06-01.
 
 ## Current Focus
 
-Validation hotfix 已完成（`76d92a2`）：`wait_for_task` docstring 修正、`HUMAN_REVIEW` 排除 stalled 检测、5 个 submit 方法添加幂等性保护。
-143 个测试全部通过。等待用户决定下一阶段方向。
+Post-runtime-mode validation hotfix 已完成（`ac0637a`）：`wait_for_task` docstring 修正、`HUMAN_REVIEW` stalled 误报修复、challenge/revision/optimization/devils_advocate/refined_requirement 提交幂等性保护。
+143 tests passing，workspace clean。等待用户决定下一阶段方向。
 
 ## Completed Since Last Save
 
-- **Validation hotfix** (`76d92a2`)：
-  - `server.py`: `wait_for_task` docstring `default: 300` → `25`
-  - `engine.py`: `HUMAN_REVIEW` 加入 `non_stall_statuses`
-  - `engine.py`: `submit_challenge`/`revision`/`optimization`/`devils_advocate`/`refined_requirement` 添加幂等性保护
-  - `tests/test_engine.py`: 新增 6 个回归测试
+- **Validation hotfix** (`ac0637a`): `wait_for_task` docstring default 300→25; `HUMAN_REVIEW` excluded from stalled detection; idempotency guards added for `submit_challenge`, `submit_revision`, `submit_optimization`, `submit_devils_advocate`, `submit_refined_requirement`.
+- Tests: 143 passing.
 
 ## Next Recommended Actions
 
 1. **Run `/dev-scope`** 分析并决定下一阶段方向
-2. **Review deferred-improvements.txt** 查找剩余 P1 项
-3. **Run `/generate-plan`** 为下一阶段生成详细计划
+2. **Run `/generate-plan`** 为下一阶段生成详细计划
 
 ## Notes For Next Session
 
 - `next-phase-plan.md` Phase D 计划全部完成（Loop 1-3）。
-- `workflow-state.yml` checkpoint 已同步至 `76d92a2`。
-- Runtime mode 功能基线 + validation hotfix 全部完成。
-- 143 个测试通过，工作区干净。
-- No blockers. Ready for next phase.
+- `workflow-state.yml` checkpoint 已同步至 `ac0637a`。
+- Runtime mode 功能基线 + validation hotfix 已完成。
+- 所有验证报告项已处理：docstring 修正、HUMAN_REVIEW stalled 修复、submit 幂等性保护。
+- 143 tests passing。Workspace clean。Ready for next phase.
 
 ---
 
