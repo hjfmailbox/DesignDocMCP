@@ -7,7 +7,9 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from .document import generate_design_document as _generate_design_document
 from .engine import CollaborationEngine
+from .models import SessionStatus
 from .store import SessionStore
 
 _store: SessionStore | None = None
@@ -322,8 +324,16 @@ async def get_session_diagnostics(body: dict[str, Any]) -> dict[str, Any]:
 
 @api_app.post("/api/v1/generate_design_document")
 async def generate_design_document(body: dict[str, Any]) -> dict[str, Any]:
-    engine = _get_engine()
-    return {"document": engine.generate_design_document(body["session_id"])}
+    store = _get_store()
+    session = store.get_session(body["session_id"])
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status not in (SessionStatus.COMPLETED, SessionStatus.HUMAN_REVIEW):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Session is in '{session.status.value}' status. Complete the debate before generating the design document.",
+        )
+    return {"document": _generate_design_document(session)}
 
 
 @api_app.post("/api/v1/add_requirement_delta")
