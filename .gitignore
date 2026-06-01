@@ -39,3 +39,7 @@ logs/
 # Playwright MCP runtime artifacts
 .playwright-mcp/
 
+# Go build artifacts
+mcp-gateway.exe
+mcp-gateway.exe~
+
