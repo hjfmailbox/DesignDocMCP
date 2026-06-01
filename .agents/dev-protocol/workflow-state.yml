@@ -14,8 +14,8 @@ state:
   active_work: phase_d_session_diagnostics_health_checks_observability
   blockers: none_detected
   last_activity:
-    commit: "8f2f2bfc77bb1f1968c95f53adb4034e599b72b6"
-    message: "chore(skills): unify agent skills to root directory with symlinks"
+    commit: "d524fc7383cc8edba57e76232bf8482522dac376"
+    message: "feat(runtime): add adaptive loop/step runtime modes for agent compatibility"
     date: "2026-06-01"
 
 version_tracking:
@@ -64,13 +64,14 @@ version_tracking:
     - phase_d_loop_1_diagnostics_engine
     - phase_d_loop_2_rest_api
     - phase_d_loop_3_frontend
+    - runtime_mode_baseline
   in_progress: []
   pending: []
 
 checkpoint:
-  last_commit: "8f2f2bfc77bb1f1968c95f53adb4034e599b72b6"
+  last_commit: "d524fc7383cc8edba57e76232bf8482522dac376"
   last_updated: "2026-06-01"
-  summary: "Skills unification complete. Agent skills migrated to root skills/ via symlinks. Git tracking fixed (.gitignore). Phase D remains complete (126 tests). Workspace clean."
+  summary: "Runtime mode feature baseline committed. LOOP/STEP dual participation via server-side client_type detection. Register/resume skills, frontend STEP badge + needs-resume indicator. 137 tests passing. Workspace clean. Awaiting validation-fix hotfix loop."
 
 git:
   branch: master

@@ -5,9 +5,9 @@ Last updated by /dev-save on 2026-06-01.
 
 ## Current Focus
 
-Phase D — Operational Readiness 全部完成（3 loops, 126 tests passing）。
-Agent skills 统一化迁移完成：根目录 `skills/` 建立，5 个 agent 目录（`.agents`、`.claude`、`.cursor`、`.atomcode`、`.trae`）及新增 `.kimi` 的 `skills/` 均改为指向根目录的符号链接，.gitignore 已排除 agent skills 跟踪。
-等待用户决定下一阶段方向。
+Runtime mode 功能基线已提交（`d524fc7`）：LOOP/STEP 双参与模式、服务端 `client_type` 检测、register/resume skill、前端 STEP badge + needs-resume 指示器。
+验证报告（PASS WITH CHANGES）识别 1 个阻塞项（`wait_for_task` docstring `300→25`）、2 个建议项（HUMAN_REVIEW stalled 误报、submit 幂等性保护）。
+等待用户决定是否立即进入 validation-fix hotfix loop。
 
 ## Next Recommended Actions
 
@@ -18,10 +18,13 @@ Agent skills 统一化迁移完成：根目录 `skills/` 建立，5 个 agent �
 ## Notes For Next Session
 
 - `next-phase-plan.md` Phase D 计划全部完成（Loop 1-3）。
-- `workflow-state.yml` checkpoint 已同步至 `8f2f2bf`。
-- Agent skills 统一化已完成，5 agent + `.kimi` 全部使用符号链接指向根 `skills/`。
-- `.gitignore` 已配置排除 agent skills 跟踪。
-- No blockers. Workspace is clean. Ready for next phase.
+- `workflow-state.yml` checkpoint 已同步至 `d524fc7`。
+- Runtime mode 功能基线已提交：LOOP/STEP 双参与、服务端检测、register/resume skill、前端 badge。
+- 验证报告（PASS WITH CHANGES）待处理：
+  - **Blocking**: `wait_for_task` docstring `default: 300` → `25`
+  - **Recommended**: HUMAN_REVIEW 加入 `non_stall_statuses`
+  - **Recommended**: challenge/revision/optimization/da 添加幂等检测
+- No blockers. Workspace clean. Ready for validation-fix hotfix or next phase.
 
 ---
 
@@ -135,11 +138,11 @@ Agent skills 统一化迁移完成：根目录 `skills/` 建立，5 个 agent �
 ## Session Context
 
 - **Project**: DesignDoc MCP (designdoc-mcp v0.3.0)
-- **Phase**: operational_readiness (Phase D complete)
+- **Phase**: operational_readiness (Phase D complete + runtime mode baseline)
 - **Branch**: master
 - **Workspace**: clean
-- **Protocol State**: v2 runtime active, Phase D all loops complete, skills unified
-- **Current Focus**: Phase D fully implemented. Skills unification complete. Awaiting next phase direction.
+- **Protocol State**: v2 runtime active, Phase D all loops complete, skills unified, runtime mode baseline committed
+- **Current Focus**: Runtime mode baseline committed. Validation report pending. Awaiting user direction.
 
 ## Completed Work Summary
 
