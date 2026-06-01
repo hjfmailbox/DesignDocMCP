@@ -72,7 +72,7 @@ def detect_runtime_mode(client_type: str) -> str:
     Known-capable clients (verified by stress test) run the autonomous LOOP
     (wait_for_task/submit_result). Everything else — unknown, empty, "generic",
     "trae", etc. — defaults to STEP mode (heartbeat/get_phase_context/submit_*
-    once per invocation, pumped manually via /resume). See skills/register/SKILL.md.
+    once per invocation, pumped manually via /resume). See skills/dd-register/SKILL.md.
     """
     return RUNTIME_MODE_LOOP if (client_type or "").strip().lower() in KNOWN_PERSISTENT_CLIENTS else RUNTIME_MODE_STEP
 

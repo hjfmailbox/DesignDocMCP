@@ -27,7 +27,7 @@ WAIT_FOR_TASK_MIN_TIMEOUT = 1
 WAIT_FOR_TASK_MAX_TIMEOUT = 600
 SSE_KEEPALIVE_SECONDS = 30
 
-# Runtime capability detection (see skills/register/SKILL.md).
+# Runtime capability detection (see skills/dd-register/SKILL.md).
 # Clients verified to sustain a long autonomous tool-call loop without user
 # confirmation, tool-call-count caps, or turn-duration caps → LOOP mode.
 # 经压力测试确认支持长时自主循环的客户端 → persistent_worker(LOOP) 模式。
