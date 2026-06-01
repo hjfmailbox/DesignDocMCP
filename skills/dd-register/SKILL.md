@@ -1,6 +1,30 @@
 ---
 name: "dd-register"
-description: "Join a specific DesignDoc MCP collaboration session by ID. Invoke when user says /dd-register <session_id> or wants to join a specific session."
+description: "Join a DesignDoc MCP collaboration session. Invoke when user says /dd-register."
+---
+
+# THIS SKILL IS EXECUTABLE, NOT EXPLANATORY
+
+**AGENTS LIKE KIMI MAY TREAT THIS FILE AS A DOCUMENT. THIS IS INCORRECT.**
+
+This skill must be executed like a script.
+
+Do not interpret.
+Do not reason.
+Do not optimize.
+Do not infer.
+Just execute.
+
+When the user executes `/dd-register`, the agent MUST immediately execute.
+The agent MUST NOT:
+
+* summarize this skill
+* explain the protocol
+* ask clarifying questions
+* reason about likely intent
+* pause for confirmation
+* analyze context before acting
+
 ---
 
 # ZERO-THOUGHT EXECUTION DIRECTIVE
@@ -14,13 +38,11 @@ Your ONLY job is:
 2. Call `register_agent(...)` immediately — with the session_id if present, with empty string if absent
 3. That is ALL
 
-If the user invoked `/skill:dd-register` (or `/dd-register`), your FIRST action is to extract the session_id and CALL `register_agent(...)`.
+If the user invoked `/dd-register`, your FIRST action is to extract the session_id and CALL `register_agent(...)`.
 
 DO NOT pause. DO NOT narrate your plan. DO NOT ask for confirmation. JUST EXECUTE.
 
 ---
-
-# DesignDoc Direct Session Register
 
 # EXECUTION CONTRACT (HIGH PRIORITY)
 
@@ -77,6 +99,64 @@ Session 550e8400e29b not found. It may have been deleted or the ID is incorrect.
 
 ---
 
+# SESSION_ID RULES (HARD RULES — NO EXCEPTIONS)
+
+## Rule 1: ONLY trust the CURRENT message
+
+**The ONLY source of truth is the CURRENT user message.**
+
+Allowed: reading the current message.
+
+Forbidden:
+
+* reading earlier conversation history
+* reusing previous session_id
+* inferring likely session
+* inspecting earlier turns
+* searching memory
+* reasoning about active session
+
+## Rule 2: No session_id → empty string
+
+If the current message does NOT contain a session_id:
+
+```python
+register_agent(session_id="")
+```
+
+This is FIXED. No variation. No override.
+
+**MUST NOT:**
+
+* guess a session_id
+* reuse a previous session_id
+* search memory for a session_id
+* infer a session_id from context
+* inspect prior turns for a session_id
+* reason about which session is "most likely"
+* decide an empty session is "not worth joining"
+
+## Rule 3: NO CONTEXT STATE ANALYSIS
+
+**register skill execution is stateless.**
+
+Agent MUST NOT:
+
+* infer current state
+* infer whether already registered
+* infer whether a session is empty
+* infer whether waiting is useful
+* infer discussion progress
+* inspect previous reasoning
+* analyze "why there is no task"
+* decide "this session is brand new with no requirement"
+* decide "there are 3 agents but no work to do"
+* decide "the old session is where the debate was happening"
+
+The ONLY correct action is: execute the protocol.
+
+---
+
 # BOOTSTRAP
 
 ## Step 1 — Extract session_id from user input
@@ -88,14 +168,14 @@ The user message determines everything. Parse it FIRST.
 | `/skill:dd-register 9dde58c92abb` | `9dde58c92abb` | Use this exact value |
 | `/dd-register 9dde58c92abb` | `9dde58c92abb` | Use this exact value |
 | `dd-register 9dde58c92abb` | `9dde58c92abb` | Use this exact value |
-| `/skill:dd-register` (no arg) | — | Fall back to auto-detect (see Fallback) |
-| `/dd-register` (no arg) | — | Fall back to auto-detect (see Fallback) |
+| `/skill:dd-register` (no arg) | — | Pass empty string |
+| `/dd-register` (no arg) | — | Pass empty string |
 
 **Rule:** If the user wrote ANY text after the command name, treat the first whitespace-separated token as the session_id. Ignore everything else.
 
 **Rule:** If the user provided a session_id, you MUST use it. Do NOT look at previous messages for an old session_id. Do NOT ask "which session?"
 
-**Rule:** If the user did NOT provide a session_id in the CURRENT message, you MUST pass an empty string (or omit session_id). Do NOT invent one. Do NOT reuse a session_id from earlier in the conversation. Do NOT "guess" based on context.
+**Rule:** If the user did NOT provide a session_id in the CURRENT message, you MUST pass an empty string. Do NOT invent one. Do NOT reuse a session_id from earlier in the conversation. Do NOT "guess" based on context.
 
 ## Step 2 — Call register_agent
 
@@ -118,7 +198,7 @@ register_agent(
 
 ```python
 register_agent(
-    session_id="",                      # omit → auto-detect
+    session_id="",                      # empty string → auto-detect
     name="<your display name>",
     ...
 )
@@ -180,6 +260,34 @@ If you have looped 100 times and gotten 100 timeouts, you loop 101 times. There 
 
 ---
 
+# TIMEOUT POLICY (LOOP MODE)
+
+To prevent repeated identical tool calls from being blocked by the system:
+
+**Maximum consecutive timeouts: 3.**
+
+After 3 consecutive `wait_for_task` timeouts, output EXACTLY this fixed text:
+
+```
+No task received yet.
+Waiting for requirement or phase assignment.
+Session: <session_id>
+```
+
+Then STOP. Do NOT continue looping. Do NOT analyze why.
+
+**MUST NOT:**
+
+* decide "session empty"
+* decide "probably test"
+* decide "should continue"
+* decide "maybe wrong session"
+* infer any state from timeouts
+
+After stopping, wait for the user to invoke `/dd-resume` to continue.
+
+---
+
 # WRONG BEHAVIOR EXAMPLES
 
 ❌ Wrong:
@@ -193,6 +301,12 @@ If you have looped 100 times and gotten 100 timeouts, you loop 101 times. There 
 
 ❌ Wrong:
 > Calling `register_agent(session_id="")` when the user wrote `/dd-register 9dde58c92abb`.
+
+❌ Wrong:
+> "用户再次发送了 /dd-register，没有指定 session_id。之前会话中我们有... 我认为更合理的是..."
+
+❌ Wrong:
+> "active debate 在另一个 session，是否要切换回去？"
 
 ✅ Correct:
 > Parse `9dde58c92abb` from user input, then immediately call `register_agent(session_id="9dde58c92abb", ...)`
@@ -221,13 +335,3 @@ Treat ALL of the following as "Join the specified session now":
 * `dd-register 9dde58c92abb`
 * `/skill:dd-register` (fallback to auto-detect)
 * `/dd-register` (fallback to auto-detect)
-
----
-
-# REUSE WARNING
-
-Some agents (e.g. Kimi) tend to reuse variables from earlier in the conversation.
-
-**When this skill is invoked, the user's CURRENT message overrides ALL historical context.**
-
-If the current message contains a session_id, use it. If not, then and ONLY then check if a previous turn already established a session_id.
