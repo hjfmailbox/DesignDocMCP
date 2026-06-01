@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 from typing import Any
 import logging
+import logging.handlers
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from .constants import (
     DEFAULT_CHALLENGE_CATEGORY,
@@ -198,16 +199,24 @@ def register_agent(
     provider: str = "",
     agent_identity: str = "",
     client_type: str = "",
+    force_mode: str = "",
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
-    """Register yourself to a collaboration session. Call this when user says /register.
+    """Register yourself to a collaboration session. Call this when user says /dd-register.
 
     All parameters are optional. The system will auto-detect:
     - If session_id is omitted: auto-joins the only active session, or returns a list to choose from
     - If name is omitted: defaults to "Agent"
     - agent_identity: stable identity across reconnects (e.g. "cursor_cli_local_hash")
-    - client_type: your client type (cursor / claude_code / atomcode / generic)
+    - client_type: your client type (cursor / claude_code / kimi / atomcode / generic)
 
-    If agent_identity matches an existing agent, you will auto-rejoin (not create a new agent).
+    Runtime mode (LOOP vs STEP) is detected SERVER-SIDE from the MCP handshake
+    (clientInfo.name), your client_type, and your name — you do NOT need to get
+    client_type exactly right. Use `force_mode` only to override ("loop"/"step").
+
+    If agent_identity (or your name → agent_id) matches an existing agent, you
+    auto-rejoin instead of creating a duplicate — this works even mid-debate.
+    For reliable reconnects, ALWAYS reuse the same agent_identity and name.
 
     Args:
         session_id: The session to join (omit to auto-discover)
@@ -215,13 +224,23 @@ def register_agent(
         model: Your model identifier (e.g., "claude-3.5-sonnet")
         provider: Your provider (e.g., "anthropic")
         agent_identity: Stable identity for auto-rejoin across reconnects
-        client_type: Client type for runtime capability detection
+        client_type: Optional hint for runtime detection (cursor/claude_code/kimi/atomcode)
+        force_mode: Optional override — "loop" (persistent_worker) or "step" (normal_worker)
 
     Returns:
         Agent registration info with rejoined/runtime_mode/phase/pending_task
     """
     engine = _get_engine()
-    logger.info("register_agent called: session_id=%r, name=%r, identity=%r, client_type=%r", session_id, name, agent_identity, client_type)
+    # Authoritative client identity from the MCP initialize handshake.
+    client_info_hint = ""
+    try:
+        if ctx is not None and ctx.session and ctx.session.client_params:
+            ci = ctx.session.client_params.clientInfo
+            if ci is not None:
+                client_info_hint = f"{getattr(ci, 'name', '') or ''} {getattr(ci, 'title', '') or ''}".strip()
+    except Exception as e:
+        logger.debug("register_agent: could not read clientInfo: %s", e)
+    logger.info("register_agent called: session_id=%r, name=%r, identity=%r, client_type=%r, client_info=%r, force_mode=%r", session_id, name, agent_identity, client_type, client_info_hint, force_mode)
     result = engine.register_agent(
         session_id=session_id,
         name=name,
@@ -229,6 +248,8 @@ def register_agent(
         provider=provider,
         agent_identity=agent_identity,
         client_type=client_type,
+        client_info_hint=client_info_hint,
+        force_mode=force_mode,
     )
     if isinstance(result, dict):
         logger.info("register_agent returned dict (choose/error): %s", result.get("action"))
@@ -271,7 +292,7 @@ def register_agent(
 def deregister_agent(session_id: str, agent_id: str) -> dict[str, Any]:
     """Deregister an agent from a session. The agent becomes inactive.
 
-    Call this when user says /deregister or wants to leave a design discussion.
+    Call this when user says /dd-deregister or wants to leave a design discussion.
     The agent will be marked as inactive and will no longer be counted for phase completion.
 
     Args:
@@ -672,6 +693,7 @@ def get_phase_context(session_id: str, agent_id: str) -> dict[str, Any]:
         Phase-specific context and instructions
     """
     engine = _get_engine()
+    logger.info("get_phase_context called: session_id=%r, agent_id=%r", session_id, agent_id)
     return engine.get_phase_context(session_id, agent_id)
 
 
@@ -1194,9 +1216,12 @@ def wait_for_task(session_id: str, agent_id: str, timeout: int = WAIT_FOR_TASK_T
     """
     engine = _get_engine()
     actual_timeout = min(max(timeout, WAIT_FOR_TASK_MIN_TIMEOUT), WAIT_FOR_TASK_MAX_TIMEOUT)
+    logger.info("wait_for_task called: session_id=%r, agent_id=%r, timeout=%s", session_id, agent_id, actual_timeout)
     task = engine.wait_for_task_engine(session_id, agent_id, timeout=float(actual_timeout))
     if task is None:
+        logger.info("wait_for_task result: session_id=%r, agent_id=%r, status=timeout", session_id, agent_id)
         return {"status": "timeout"}
+    logger.info("wait_for_task result: session_id=%r, agent_id=%r, task_type=%s, phase=%s, round=%s", session_id, agent_id, task.get("task_type"), task.get("phase"), task.get("round_number"))
     return task
 
 
@@ -1387,10 +1412,10 @@ def list_sessions_resource() -> str:
             agents_str = ", ".join(a.name for a in s.agents) if s.agents else "none"
             req_status = "has requirement" if s.requirement else "no requirement"
             lines.append(f"- {s.session_id}: {s.title} [{s.status.value}] Phase: {s.current_phase.value} | {req_status} | Agents: {agents_str}")
-            lines.append(f"  -> Register: /register {s.session_id}")
+            lines.append(f"  -> Register: /dd-register {s.session_id}")
         if len(active) == 1:
             lines.append("")
-            lines.append(f"Only one active session. You can register directly: /register {active[0].session_id}")
+            lines.append(f"Only one active session. You can register directly: /dd-register {active[0].session_id}")
     archived = [s for s in sessions if s.status in (SessionStatus.ARCHIVED, SessionStatus.COMPLETED)]
     if archived:
         lines.append("")
@@ -1419,7 +1444,7 @@ def active_session_resource() -> str:
             "requirement_submitted": s.requirement is not None,
         }
         return json.dumps(data, indent=2)
-    return json.dumps({"message": f"Multiple active sessions ({len(active)}). Use /register to see and choose, or check designdoc://sessions for details."}, indent=2)
+    return json.dumps({"message": f"Multiple active sessions ({len(active)}). Use /dd-register to see and choose, or check designdoc://sessions for details."}, indent=2)
 
 
 @mcp.resource("designdoc://session/{session_id}")
@@ -1456,16 +1481,16 @@ You are connected to a DesignDoc MCP server for multi-agent design document coll
 3. Save the returned `session_id`, `agent_id`, and **`runtime_mode`**
 4. Participate according to `runtime_mode`:
    - **`persistent_worker` (LOOP)**: run a `wait_for_task(timeout=25)` → `submit_result` loop continuously (short poll; do NOT use a single long block). For clients that can sustain a long autonomous turn.
-   - **`normal_worker` (STEP)**: do ONE step per invocation — `heartbeat` → `get_phase_context` → submit the current phase's tool → stop and tell the user to run `/resume` when it's your turn again. For clients that cannot hold a long loop. Do NOT fake a loop.
+   - **`normal_worker` (STEP)**: do ONE step per invocation — `heartbeat` → `get_phase_context` → submit the current phase's tool → stop and tell the user to run `/dd-resume` when it's your turn again. For clients that cannot hold a long loop. Do NOT fake a loop.
 
-Detection is server-side from `client_type`. Known LOOP-capable: `cursor`, `claude_code`, `kimi`, `atomcode`. Anything else (incl. empty / `generic` / `trae`) → STEP mode.
+Detection is server-side from the MCP handshake (clientInfo.name), your `client_type`, and your name — you do NOT need to self-report perfectly. Known LOOP-capable: `cursor`, `claude_code`, `kimi`, `atomcode`. Anything else (incl. `trae` / generic) → STEP mode. Reuse the SAME `agent_identity` + name across reconnects so you auto-rejoin (works even mid-debate).
 
-**IMPORTANT**: During "wait" phases (clarify_review, human_review), keep your heartbeat alive — LOOP mode does this naturally via short-poll `wait_for_task`; STEP mode just waits for the next `/resume`. The 5-minute inactivity timeout marks silent agents inactive.
+**IMPORTANT**: During "wait" phases (clarify_review, human_review), keep your heartbeat alive — LOOP mode does this naturally via short-poll `wait_for_task`; STEP mode just waits for the next `/dd-resume`. The 5-minute inactivity timeout marks silent agents inactive.
 
 ## Commands
-- `/register` - Register to a session (auto-detects session + runtime mode)
-- `/resume` - (STEP mode) advance one step; re-run when it's your turn again
-- `/deregister` - Leave the current session
+- `/dd-register` - Register to a session (auto-detects session + runtime mode)
+- `/dd-resume` - (STEP mode) advance one step; re-run when it's your turn again
+- `/dd-deregister` - Leave the current session
 
 ## Phase Actions
 | Phase | Your Action |
@@ -1486,7 +1511,7 @@ Detection is server-side from `client_type`. Known LOOP-capable: `cursor`, `clau
         guide += "\n## Current Status\nNo active sessions. Ask the user to create one via the Web UI at http://localhost:8765"
     elif len(active) == 1:
         s = active[0]
-        guide += f"\n## Current Status\nOne active session: **{s.session_id}** ({s.title})\nStatus: {s.status.value} | Phase: {s.current_phase.value}\nRegister now: `/register {s.session_id}`"
+        guide += f"\n## Current Status\nOne active session: **{s.session_id}** ({s.title})\nStatus: {s.status.value} | Phase: {s.current_phase.value}\nRegister now: `/dd-register {s.session_id}`"
     else:
         guide += f"\n## Current Status\n{len(active)} active sessions. Read `designdoc://sessions` to see them all."
     return guide
@@ -1534,7 +1559,7 @@ def main() -> None:
         from .web import web_app
 
         sse_app = mcp.http_app(transport="sse")
-        http_app = mcp.http_app(transport="http", stateless_http=True)
+        http_app = mcp.http_app(transport="streamable-http")
 
         routes = list(sse_app.routes) + list(http_app.routes)
 
@@ -1556,24 +1581,89 @@ def main() -> None:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
 
-        # 主日志
-        main_handler = logging.FileHandler(log_path / "designdoc_mcp.log", encoding="utf-8")
-        main_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        log_fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        sess_fmt = logging.Formatter("%(asctime)s %(message)s")
+
+        # ---- 主日志 (INFO+, 按天轮转, 保留7天) ----
+        main_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path / "designdoc_mcp.log",
+            when="midnight",
+            interval=1,
+            backupCount=7,
+            encoding="utf-8",
+        )
+        main_handler.setLevel(logging.INFO)
+        main_handler.setFormatter(log_fmt)
         main_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
         logging.getLogger().addHandler(main_handler)
 
-        # 心跳日志（单独文件）
-        hb_handler = logging.FileHandler(log_path / "heartbeat.log", encoding="utf-8")
+        # ---- DEBUG 日志 (DEBUG+, 按天轮转, 保留3天) ----
+        debug_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path / "debug.log",
+            when="midnight",
+            interval=1,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        debug_handler.setLevel(logging.DEBUG)
+        debug_handler.setFormatter(log_fmt)
+        debug_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
+        logging.getLogger().addHandler(debug_handler)
+
+        # ---- Session 诊断日志 (独立文件, 保留7天) ----
+        sess_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path / "session-events.log",
+            when="midnight",
+            interval=1,
+            backupCount=7,
+            encoding="utf-8",
+        )
+        sess_handler.setLevel(logging.INFO)
+        sess_handler.setFormatter(sess_fmt)
+        sess_logger = logging.getLogger("designdoc_mcp.session")
+        sess_logger.addHandler(sess_handler)
+        sess_logger.propagate = False
+
+        # ---- 心跳日志（单独文件, 保留7天） ----
+        hb_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path / "heartbeat.log",
+            when="midnight",
+            interval=1,
+            backupCount=7,
+            encoding="utf-8",
+        )
         hb_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
         hb_logger = logging.getLogger("designdoc_mcp.heartbeat")
         hb_logger.addHandler(hb_handler)
-        hb_logger.propagate = False  # 不传播到根 logger
+        hb_logger.propagate = False
 
         logging.getLogger("uvicorn").addHandler(main_handler)
         logging.getLogger("uvicorn.access").addHandler(main_handler)
         logging.getLogger().setLevel(logging.DEBUG)
         logger.info("DesignDoc MCP server starting - logs: %s", log_path)
         logger.info("MCP endpoints: SSE=GET /sse + POST /messages, StreamableHTTP=POST /mcp")
+
+        # --- FastMCP streamable-http concurrent-request bug workaround ---
+        # fastmcp 3.3.1 (mcp 1.x) can crash with AssertionError:
+        #   "Request already responded to"
+        # when multiple concurrent requests hit the same streamable-http session.
+        # Patch RequestResponder.respond to silently drop duplicate responses.
+        import mcp.shared.session as _mcp_session
+
+        _original_respond = _mcp_session.RequestResponder.respond
+
+        async def _safe_respond(self, response):
+            if getattr(self, "_completed", False):
+                logger.warning(
+                    "Suppressed duplicate respond for request %s "
+                    "(FastMCP streamable-http concurrent bug)",
+                    getattr(self, "request_id", "?"),
+                )
+                return
+            return await _original_respond(self, response)
+
+        _mcp_session.RequestResponder.respond = _safe_respond
+        # --- end workaround ---
 
         import signal
 

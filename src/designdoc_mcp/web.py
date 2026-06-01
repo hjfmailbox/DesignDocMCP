@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -214,6 +217,7 @@ async def human_decision_api(session_id: str, request: Request, _auth=Depends(_v
 
 @web_app.post("/api/sessions/{session_id}/force-skip-clarification")
 async def force_skip_clarification_api(session_id: str, _auth=Depends(_verify_token)):
+    logger.info("force_skip_clarification_api called: session_id=%s", session_id)
     engine = _get_engine()
     try:
         result = engine.force_skip_clarification(session_id)
@@ -226,6 +230,28 @@ async def force_skip_clarification_api(session_id: str, _auth=Depends(_verify_to
 async def check_stalled_api(session_id: str, _auth=Depends(_verify_token)):
     engine = _get_engine()
     return engine.check_stalled(session_id)
+
+
+@web_app.post("/api/sessions/{session_id}/request-human-review")
+async def request_human_review_api(session_id: str, request: Request, _auth=Depends(_verify_token)):
+    """Force a stuck debate into HUMAN_REVIEW so the human can approve/reject/override.
+
+    Recovery path when the session is blocked mid-debate (e.g. a dropped agent
+    cannot rejoin, or no progress). After this, new/returning agents may register
+    again (the late-phase restriction does not apply in human_review).
+    """
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    reason = body.get("reason", "") or "Human intervention requested from UI"
+    engine = _get_engine()
+    try:
+        engine.request_human_review(session_id, reason)
+        return {"status": "ok", "action": "human_review", "reason": reason}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @web_app.post("/api/sessions/{session_id}/heartbeat/{agent_id}")
@@ -323,11 +349,14 @@ async def register_agent_api(session_id: str, request: Request, _auth=Depends(_v
 
 @web_app.post("/api/sessions/{session_id}/start-clarification")
 async def start_clarification_api(session_id: str, _auth=Depends(_verify_token)):
+    logger.info("start_clarification_api called: session_id=%s", session_id)
     engine = _get_engine()
     try:
         result = engine.start_clarification(session_id)
+        logger.info("start_clarification_api success: session_id=%s, phase=%s", session_id, result.get("phase"))
         return result
     except ValueError as e:
+        logger.warning("start_clarification_api failed: session_id=%s, error=%s", session_id, e)
         raise HTTPException(status_code=400, detail=str(e))
 
 
