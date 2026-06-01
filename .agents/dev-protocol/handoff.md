@@ -5,9 +5,16 @@ Last updated by /dev-save on 2026-06-01.
 
 ## Current Focus
 
-Runtime mode 功能基线已提交（`d524fc7`）：LOOP/STEP 双参与模式、服务端 `client_type` 检测、register/resume skill、前端 STEP badge + needs-resume 指示器。
-验证报告（PASS WITH CHANGES）识别 1 个阻塞项（`wait_for_task` docstring `300→25`）、2 个建议项（HUMAN_REVIEW stalled 误报、submit 幂等性保护）。
-等待用户决定是否立即进入 validation-fix hotfix loop。
+Validation hotfix 已完成（`76d92a2`）：`wait_for_task` docstring 修正、`HUMAN_REVIEW` 排除 stalled 检测、5 个 submit 方法添加幂等性保护。
+143 个测试全部通过。等待用户决定下一阶段方向。
+
+## Completed Since Last Save
+
+- **Validation hotfix** (`76d92a2`)：
+  - `server.py`: `wait_for_task` docstring `default: 300` → `25`
+  - `engine.py`: `HUMAN_REVIEW` 加入 `non_stall_statuses`
+  - `engine.py`: `submit_challenge`/`revision`/`optimization`/`devils_advocate`/`refined_requirement` 添加幂等性保护
+  - `tests/test_engine.py`: 新增 6 个回归测试
 
 ## Next Recommended Actions
 
@@ -18,13 +25,10 @@ Runtime mode 功能基线已提交（`d524fc7`）：LOOP/STEP 双参与模式、
 ## Notes For Next Session
 
 - `next-phase-plan.md` Phase D 计划全部完成（Loop 1-3）。
-- `workflow-state.yml` checkpoint 已同步至 `d524fc7`。
-- Runtime mode 功能基线已提交：LOOP/STEP 双参与、服务端检测、register/resume skill、前端 badge。
-- 验证报告（PASS WITH CHANGES）待处理：
-  - **Blocking**: `wait_for_task` docstring `default: 300` → `25`
-  - **Recommended**: HUMAN_REVIEW 加入 `non_stall_statuses`
-  - **Recommended**: challenge/revision/optimization/da 添加幂等检测
-- No blockers. Workspace clean. Ready for validation-fix hotfix or next phase.
+- `workflow-state.yml` checkpoint 已同步至 `76d92a2`。
+- Runtime mode 功能基线 + validation hotfix 全部完成。
+- 143 个测试通过，工作区干净。
+- No blockers. Ready for next phase.
 
 ---
 

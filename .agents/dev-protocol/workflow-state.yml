@@ -10,12 +10,12 @@ project:
 
 state:
   current_phase: operational_readiness
-  current_focus: phase_d_all_loops_complete_awaiting_next_phase
+  current_focus: validation_hotfix_complete_awaiting_next_phase
   active_work: phase_d_session_diagnostics_health_checks_observability
   blockers: none_detected
   last_activity:
-    commit: "d524fc7383cc8edba57e76232bf8482522dac376"
-    message: "feat(runtime): add adaptive loop/step runtime modes for agent compatibility"
+    commit: "76d92a25f8ab6dbbb73a5bc3639faf334b3f70f7"
+    message: "fix(validation): apply post-runtime-mode hotfixes"
     date: "2026-06-01"
 
 version_tracking:
@@ -65,13 +65,14 @@ version_tracking:
     - phase_d_loop_2_rest_api
     - phase_d_loop_3_frontend
     - runtime_mode_baseline
+    - validation_hotfix
   in_progress: []
   pending: []
 
 checkpoint:
-  last_commit: "d524fc7383cc8edba57e76232bf8482522dac376"
+  last_commit: "76d92a25f8ab6dbbb73a5bc3639faf334b3f70f7"
   last_updated: "2026-06-01"
-  summary: "Runtime mode feature baseline committed. LOOP/STEP dual participation via server-side client_type detection. Register/resume skills, frontend STEP badge + needs-resume indicator. 137 tests passing. Workspace clean. Awaiting validation-fix hotfix loop."
+  summary: "Validation hotfix committed. wait_for_task docstring corrected (300->25), HUMAN_REVIEW excluded from stalled detection, idempotency guards added to 5 submit methods. 143 tests passing. Workspace clean. Ready for next phase."
 
 git:
   branch: master
