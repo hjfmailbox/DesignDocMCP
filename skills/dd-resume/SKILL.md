@@ -1,16 +1,16 @@
 ---
-name: "resume"
-description: "Advance one step in a DesignDoc MCP session (STEP-mode clients). Invoke when user says /resume or the Web UI marks you as needing a manual wake."
+name: "dd-resume"
+description: "Advance one step in a DesignDoc MCP session (STEP-mode clients). Invoke when user says /dd-resume or the Web UI marks you as needing a manual wake."
 ---
 
 # DesignDoc Resume (STEP-mode pump)
 
-`/resume` performs **exactly one collaboration step** and then hands control
+`/dd-resume` performs **exactly one collaboration step** and then hands control
 back to the user. It is the manual "pump" for clients that cannot hold a long
-autonomous loop (those registered as `normal_worker` / STEP mode by `/register`).
+autonomous loop (those registered as `normal_worker` / STEP mode by `/dd-register`).
 
 > If you registered as `persistent_worker` (LOOP mode), you do NOT need
-> `/resume` — your `wait_for_task` loop already drives itself. `/resume` is only
+> `/dd-resume` — your `wait_for_task` loop already drives itself. `/dd-resume` is only
 > for STEP mode.
 
 ---
@@ -18,8 +18,8 @@ autonomous loop (those registered as `normal_worker` / STEP mode by `/register`)
 # Preconditions
 
 You must already be registered (have `session_id` + `agent_id`). If you don't,
-run `/register` first. If your identity was lost on disconnect, re-run
-`/register` with the same `agent_identity` to auto-rejoin, then `/resume`.
+run `/dd-register` first. If your identity was lost on disconnect, re-run
+`/dd-register` with the same `agent_identity` to auto-rejoin, then `/dd-resume`.
 
 ---
 
@@ -51,7 +51,7 @@ run `/register` first. If your identity was lost on disconnect, re-run
 4. **STOP** and report plainly:
    * phase + what you submitted (or "nothing to do — waiting on others/human");
    * that the flow advances only when all participants submit;
-   * **"Run `/resume` again when the Web UI marks me ⏳ needs-wake or the phase
+   * **"Run `/dd-resume` again when the Web UI marks me ⏳ needs-wake or the phase
      advances."**
 
 ---
@@ -64,5 +64,5 @@ run `/register` first. If your identity was lost on disconnect, re-run
   coordinate directly with other agents.
 * Do NOT write a background script/process to keep running.
 
-One `/resume` = one step. The user (or the client's own scheduler, e.g. Cursor
-`/loop`) re-invokes `/resume` when it's your turn again.
+One `/dd-resume` = one step. The user (or the client's own scheduler, e.g. Cursor
+`/loop`) re-invokes `/dd-resume` when it's your turn again.
