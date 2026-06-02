@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import random
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+_WEB_UI_URL = f"http://localhost:{os.environ.get('DESIGNDOC_API_PORT', '9000')}"
 
 from .clarity_config import (
     DIMENSION_KEYWORDS,
@@ -197,7 +200,7 @@ class CollaborationEngine:
             active = [s for s in self.store.list_sessions() if s.status not in (SessionStatus.ARCHIVED, SessionStatus.COMPLETED)]
             if len(active) == 0:
                 logger.warning("register_agent: no active sessions found")
-                return {"action": "error", "message": "No active sessions. Create one via the Web UI at http://localhost:8765"}
+                return {"action": "error", "message": f"No active sessions. Create one via the Web UI at {_WEB_UI_URL}"}
             if len(active) == 1:
                 session_id = active[0].session_id
                 logger.info("register_agent: auto-detected single session %s", session_id)

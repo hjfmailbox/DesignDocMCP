@@ -41,6 +41,7 @@ DEBATE_PHASES = [
 PHASE_ORDER: list[DebatePhase] = CLARIFY_PHASES + DEBATE_PHASES
 
 PHASE_DESCRIPTIONS: dict[DebatePhase, str] = {
+    DebatePhase.CREATED: "Session has been created but not yet started. Wait for the facilitator to start the debate.",
     DebatePhase.CLARIFY_IDENTIFY: "Each agent independently identifies assumptions in the fuzzy requirement. Do NOT read other agents' assumptions. Produce a structured assumption document organized by dimension (data, users, workflow, non-functional, integration). Each assumption must include alternatives for human to choose from.",
     DebatePhase.CLARIFY_REFINE: "System has merged all assumptions. Agents can now supplement alternatives to existing assumptions, but cannot remove or challenge assumptions raised by others. Focus on adding missing options.",
     DebatePhase.CLARIFY_REVIEW: "Human reviews the merged assumption document. For each assumption, human can accept the default or choose an alternative. Divergent assumptions (agents disagree) must be resolved.",

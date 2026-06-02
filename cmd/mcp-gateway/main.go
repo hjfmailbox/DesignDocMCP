@@ -55,11 +55,27 @@ func main() {
 
 	case "streamable-http":
 		addr := fmt.Sprintf("%s:%d", *host, *port)
-		handler := sdkmcp.NewStreamableHTTPHandler(func(req *http.Request) *sdkmcp.Server {
+
+		// Support both SSE and streamable-http on the same port,
+		// matching the old FastMCP server behavior.
+		mux := http.NewServeMux()
+
+		// SSE transport at /sse and /mcp/sse (legacy client compatibility)
+		sseHandler := sdkmcp.NewSSEHandler(func(req *http.Request) *sdkmcp.Server {
 			return server
 		}, nil)
-		log.Printf("Starting MCP server on streamable-http at %s ...", addr)
-		if err := http.ListenAndServe(addr, handler); err != nil {
+		mux.Handle("/sse", sseHandler)
+		mux.Handle("/mcp/sse", sseHandler)
+
+		// Streamable-http transport at / and /mcp
+		streamableHandler := sdkmcp.NewStreamableHTTPHandler(func(req *http.Request) *sdkmcp.Server {
+			return server
+		}, nil)
+		mux.Handle("/", streamableHandler)
+		mux.Handle("/mcp", streamableHandler)
+
+		log.Printf("Starting MCP server on streamable-http at %s (with SSE at /sse and /mcp/sse)...", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
 			log.Fatalf("streamable-http server error: %v", err)
 		}
 

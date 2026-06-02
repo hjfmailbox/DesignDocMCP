@@ -53,16 +53,16 @@ async def _verify_token(request: Request) -> None:
 def _get_store() -> SessionStore:
     global _store
     if _store is None:
-        from .server import _get_store as _server_get_store
-        _store = _server_get_store()
+        from .state import _get_store as _state_get_store
+        _store = _state_get_store()
     return _store
 
 
 def _get_engine() -> CollaborationEngine:
     global _engine
     if _engine is None:
-        from .server import _get_engine as _server_get_engine
-        _engine = _server_get_engine()
+        from .state import _get_engine as _state_get_engine
+        _engine = _state_get_engine()
     return _engine
 
 

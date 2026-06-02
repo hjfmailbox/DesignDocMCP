@@ -266,19 +266,19 @@ body{background:var(--bg0);color:var(--t1);font-family:-apple-system,BlinkMacSys
   <div class="flex items-center gap-3 flex-wrap">
     <div class="flex items-center gap-2">
       <span class="text-xs font-semibold" style="color:var(--t3)">Health</span>
-      <span class="badge text-sm" :class="diagnostics.health_score>=80?'b-ok':diagnostics.health_score>=50?'b-wn':'b-er'" x-text="diagnostics.health_score"></span>
+      <span class="badge text-sm" :class="(diagnostics?.health_score??0)>=80?'b-ok':(diagnostics?.health_score??0)>=50?'b-wn':'b-er'" x-text="diagnostics?.health_score??'-'"></span>
     </div>
-    <div x-show="diagnostics.stall_status&&diagnostics.stall_status.is_stalled" class="flex items-center gap-1">
+    <div x-show="diagnostics?.stall_status?.is_stalled" class="flex items-center gap-1">
       <i class="fas fa-clock text-xs" style="color:var(--er)"></i>
-      <span class="text-xs" style="color:var(--er)">Stalled <span x-text="diagnostics.stall_status.seconds_since_activity+'s'"></span></span>
+      <span class="text-xs" style="color:var(--er)">Stalled <span x-text="(diagnostics?.stall_status?.seconds_since_activity??0)+'s'"></span></span>
     </div>
-    <div x-show="diagnostics.workflow_progress" class="flex items-center gap-1">
+    <div x-show="diagnostics?.workflow_progress" class="flex items-center gap-1">
       <span class="text-xs" style="color:var(--t3)">Phase:</span>
-      <span class="text-xs" style="color:var(--t2)" x-text="diagnostics.workflow_progress.current_phase"></span>
+      <span class="text-xs" style="color:var(--t2)" x-text="diagnostics?.workflow_progress?.current_phase"></span>
     </div>
   </div>
-  <div x-show="diagnostics.warnings&&diagnostics.warnings.length" class="mt-2 space-y-1">
-    <template x-for="w in diagnostics.warnings" :key="w.category+w.message">
+  <div x-show="diagnostics?.warnings?.length" class="mt-2 space-y-1">
+    <template x-for="w in diagnostics?.warnings||[]" :key="w.category+w.message">
       <div class="flex items-start gap-2 text-xs p-1.5" style="background:var(--bg3);border-radius:4px">
         <i class="fas fa-exclamation-triangle mt-0.5" style="color:var(--wn)"></i>
         <div>

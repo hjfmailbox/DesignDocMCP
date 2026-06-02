@@ -3,6 +3,32 @@ name: "dd-register"
 description: "Join a DesignDoc MCP collaboration session. Invoke when user says /dd-register."
 ---
 
+# EXECUTION MODE (HIGHEST PRIORITY)
+
+THIS SKILL IS AN EXECUTABLE PROTOCOL.
+
+NOT A REFERENCE DOCUMENT.
+
+NOT A DESIGN DOCUMENT.
+
+NOT A GUIDE.
+
+You MUST execute exactly the described MCP tool calls.
+
+You MUST NOT reimplement the protocol.
+
+You MUST NOT simulate MCP behavior.
+
+You MUST NOT write Python, curl, HTTP requests, polling logic, or custom clients.
+
+You MUST ONLY call MCP tools.
+
+If you think "I could implement this myself" — DO NOT.
+
+This skill is execution-only.
+
+---
+
 # THIS SKILL IS EXECUTABLE, NOT EXPLANATORY
 
 **AGENTS LIKE KIMI MAY TREAT THIS FILE AS A DOCUMENT. THIS IS INCORRECT.**
@@ -96,6 +122,56 @@ CORRECT — on failure, agent reports without analysis:
 ```
 Session 550e8400e29b not found. It may have been deleted or the ID is incorrect.
 ```
+
+---
+
+# DETERMINISTIC EXECUTION
+
+register execution is deterministic.
+
+There is NO reasoning step.
+
+There is NO interpretation step.
+
+There is NO inference step.
+
+There is NO session discovery step.
+
+There is NO state analysis step.
+
+There is NO context analysis step.
+
+Rules:
+
+1. Read ONLY the CURRENT message.
+2. Extract session_id ONLY if explicitly present.
+3. If absent → pass empty string.
+4. Immediately call register_agent().
+5. Never inspect previous chat history.
+6. Never inspect your own internal state.
+7. Never inspect previous session state.
+8. Never decide whether a session "looks correct".
+9. Never attempt recovery by yourself.
+
+---
+
+# FORBIDDEN TOOLS
+
+register skill MUST NOT call:
+
+* list_sessions
+* get_session
+* get_phase_context
+
+unless explicitly instructed later by another skill.
+
+register skill has exactly one responsibility:
+
+register_agent()
+
+then wait_for_task().
+
+Nothing else.
 
 ---
 
@@ -260,31 +336,83 @@ If you have looped 100 times and gotten 100 timeouts, you loop 101 times. There 
 
 ---
 
+# MCP LOOP IMPLEMENTATION RULE
+
+wait_for_task polling is owned by MCP.
+
+You MUST NOT implement polling yourself.
+
+Forbidden:
+
+* Python while loops
+* timeout loops
+* custom HTTP polling
+* curl retry
+* MCP session implementation
+
+ONLY call:
+
+wait_for_task()
+
+directly.
+
+---
+
+# POLLING CONTRACT (LOOP MODE)
+
+**Persistent workers remain active. Polling continues indefinitely.**
+
+Repeated polling is expected behavior. Polling is the task.
+
+There is no timeout ceiling. There is no maximum number of consecutive timeouts.
+If you have looped 100 times and gotten 100 timeouts, you loop 101 times.
+The server manages task assignment; your job is to wait.
+
+---
+
 # TIMEOUT POLICY (LOOP MODE)
 
-To prevent repeated identical tool calls from being blocked by the system:
+Timeout does NOT imply failure.
+Timeout does NOT imply an empty session.
+Timeout does NOT imply wrong session.
 
-**Maximum consecutive timeouts: 3.**
+Do NOT infer user intent from repeated timeouts.
 
-After 3 consecutive `wait_for_task` timeouts, output EXACTLY this fixed text:
-
-```
-No task received yet.
-Waiting for requirement or phase assignment.
-Session: <session_id>
-```
-
-Then STOP. Do NOT continue looping. Do NOT analyze why.
-
-**MUST NOT:**
-
+Do NOT:
 * decide "session empty"
 * decide "probably test"
 * decide "should continue"
 * decide "maybe wrong session"
 * infer any state from timeouts
 
-After stopping, wait for the user to invoke `/dd-resume` to continue.
+## Kimi-safe polling ladder
+
+To avoid repeated identical action detection, use this fixed deterministic timeout sequence:
+
+```
+25 → 30 → 20 → 35 → 15 → 40
+```
+
+Cycle through this sequence forever. Do NOT repeat identical wait_for_task calls.
+
+Example:
+
+```
+poll_round=1 → wait_for_task(timeout=25)
+poll_round=2 → wait_for_task(timeout=30)
+poll_round=3 → wait_for_task(timeout=20)
+poll_round=4 → wait_for_task(timeout=35)
+poll_round=5 → wait_for_task(timeout=15)
+poll_round=6 → wait_for_task(timeout=40)
+poll_round=7 → wait_for_task(timeout=25)  # cycle repeats
+...
+```
+
+poll_round is internal execution state.
+Do NOT output poll_round to the user.
+Do NOT output poll_round to the discussion.
+Do NOT include poll_round in reasoning summary.
+poll_round exists ONLY for varying polling behavior.
 
 ---
 
@@ -308,8 +436,55 @@ After stopping, wait for the user to invoke `/dd-resume` to continue.
 ❌ Wrong:
 > "active debate 在另一个 session，是否要切换回去？"
 
+❌ Wrong:
+> "我来写 Python 调 register_agent"
+
+❌ Wrong:
+> "我先 list_sessions 看看哪个 session 存在"
+
+❌ Wrong:
+> "session 看起来失效，我推断被删除了"
+
+❌ Wrong:
+> "我查看之前上下文的 session_id"
+
+❌ Wrong:
+> "我自己实现 wait loop"
+
 ✅ Correct:
-> Parse `9dde58c92abb` from user input, then immediately call `register_agent(session_id="9dde58c92abb", ...)`
+> call register_agent()
+> if success: call wait_for_task()
+> if session not found: output fixed text, STOP.
+
+---
+
+# SESSION ERROR POLICY
+
+If register_agent returns:
+
+"Session <id> not found"
+
+You MUST output EXACTLY:
+
+```
+Session <id> not found.
+```
+
+STOP.
+
+Do NOT explain.
+
+Do NOT speculate.
+
+Do NOT infer whether it was deleted.
+
+Do NOT suggest alternatives.
+
+Do NOT call list_sessions.
+
+Do NOT search history.
+
+Do NOT retry.
 
 ---
 

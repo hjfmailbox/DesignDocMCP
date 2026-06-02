@@ -7,6 +7,8 @@ from typing import Any
 import logging
 import logging.handlers
 
+_WEB_UI_URL = f"http://localhost:{os.environ.get('DESIGNDOC_API_PORT', '9000')}"
+
 from fastmcp import Context, FastMCP
 
 from .constants import (
@@ -1403,7 +1405,7 @@ def list_sessions_resource() -> str:
     store = _get_store()
     sessions = store.list_sessions()
     if not sessions:
-        return "No sessions found. Create one via the Web UI at http://localhost:8765"
+        return f"No sessions found. Create one via the Web UI at {_WEB_UI_URL}"
     active = [s for s in sessions if s.status.value not in ("archived", "completed")]
     lines = []
     if active:
@@ -1430,7 +1432,7 @@ def active_session_resource() -> str:
     sessions = store.list_sessions()
     active = [s for s in sessions if s.status.value not in ("archived", "completed")]
     if not active:
-        return json.dumps({"message": "No active sessions. Create one via the Web UI at http://localhost:8765"}, indent=2)
+        return json.dumps({"message": f"No active sessions. Create one via the Web UI at {_WEB_UI_URL}"}, indent=2)
     if len(active) == 1:
         s = active[0]
         data = {
@@ -1508,7 +1510,7 @@ Detection is server-side from the MCP handshake (clientInfo.name), your `client_
 | human_review | Wait for human |
 """
     if not active:
-        guide += "\n## Current Status\nNo active sessions. Ask the user to create one via the Web UI at http://localhost:8765"
+        guide += f"\n## Current Status\nNo active sessions. Ask the user to create one via the Web UI at {_WEB_UI_URL}"
     elif len(active) == 1:
         s = active[0]
         guide += f"\n## Current Status\nOne active session: **{s.session_id}** ({s.title})\nStatus: {s.status.value} | Phase: {s.current_phase.value}\nRegister now: `/dd-register {s.session_id}`"

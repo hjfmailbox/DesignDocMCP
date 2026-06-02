@@ -58,7 +58,7 @@ def _wait_for_api(timeout: float = 15.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         result = subprocess.run(
-            ["curl", "-sf", f"http://127.0.0.1:{API_PORT}/api/v1/list_sessions"],
+            ["curl", "-sf", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", f"http://127.0.0.1:{API_PORT}/api/v1/list_sessions"],
             capture_output=True,
         )
         if result.returncode == 0:

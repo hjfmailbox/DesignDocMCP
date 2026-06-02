@@ -12,6 +12,9 @@ import (
 
 // objectSchema builds a minimal JSON Schema object descriptor.
 func objectSchema(props map[string]any, required []string) map[string]any {
+	if required == nil {
+		required = []string{}
+	}
 	return map[string]any{
 		"type":       "object",
 		"properties": props,

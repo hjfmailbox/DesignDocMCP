@@ -8,12 +8,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .document import generate_design_document as _generate_design_document
-from .engine import CollaborationEngine
 from .models import SessionStatus
-from .store import SessionStore
-
-_store: SessionStore | None = None
-_engine: CollaborationEngine | None = None
+from .state import _get_engine, _get_store
 
 
 def _serialize(obj: Any) -> Any:
@@ -28,26 +24,6 @@ def _serialize_list(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_serialize(item) for item in obj]
     return _serialize(obj)
-
-
-def _get_store() -> SessionStore:
-    global _store
-    if _store is None:
-        storage_backend = os.environ.get("DESIGNDOC_STORAGE", "json").lower()
-        data_dir = os.environ.get("DESIGNDOC_DATA_DIR")
-        if storage_backend == "sqlite":
-            from .sqlite_store import SQLiteBackend
-            _store = SQLiteBackend(data_dir)  # type: ignore[assignment]
-        else:
-            _store = SessionStore(data_dir)
-    return _store
-
-
-def _get_engine() -> CollaborationEngine:
-    global _engine
-    if _engine is None:
-        _engine = CollaborationEngine(_get_store())
-    return _engine
 
 
 api_app = FastAPI(title="DesignDoc Engine API", version="0.3.0")
@@ -111,7 +87,12 @@ async def submit_requirement(body: dict[str, Any]) -> dict[str, Any]:
     engine = _get_engine()
     req = engine.submit_requirement(
         session_id=body["session_id"],
-        requirement=body["requirement"],
+        problem_statement=body.get("problem_statement", ""),
+        constraints=body.get("constraints"),
+        acceptance_criteria=body.get("acceptance_criteria"),
+        open_questions=body.get("open_questions"),
+        tech_preferences=body.get("tech_preferences"),
+        forbidden_items=body.get("forbidden_items"),
     )
     return _serialize(req)
 
@@ -155,11 +136,14 @@ async def heartbeat(body: dict[str, Any]) -> dict[str, Any]:
 @api_app.post("/api/v1/wait_for_task")
 async def wait_for_task(body: dict[str, Any]) -> dict[str, Any]:
     engine = _get_engine()
-    return engine.wait_for_task_engine(
+    task = engine.wait_for_task_engine(
         session_id=body["session_id"],
         agent_id=body["agent_id"],
         timeout=body.get("timeout", 25),
     )
+    if task is None:
+        return {"status": "timeout"}
+    return task
 
 
 @api_app.post("/api/v1/submit_result")
@@ -528,6 +512,12 @@ def main() -> None:
     host = os.environ.get("DESIGNDOC_API_HOST", "127.0.0.1")
     port = int(os.environ.get("DESIGNDOC_API_PORT", "9000"))
     uvicorn.run(api_app, host=host, port=port, log_level="info")
+
+
+# Mount Web UI into the same process so port 9000 serves both API and UI.
+from .web import web_app as _web_app  # noqa: E402
+
+api_app.mount("/", _web_app)
 
 
 if __name__ == "__main__":
