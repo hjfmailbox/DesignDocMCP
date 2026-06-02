@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,13 +14,42 @@ import (
 
 	"github.com/fluorine/designdoc-mcp/probe/internal/api"
 	"github.com/fluorine/designdoc-mcp/probe/internal/logger"
+	"github.com/fluorine/designdoc-mcp/probe/internal/orchestrator"
 	"github.com/fluorine/designdoc-mcp/probe/internal/scheduler"
 	"github.com/fluorine/designdoc-mcp/probe/internal/server"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
+	mode := flag.String("mode", "server", "Run mode: server or orchestrator")
+	sessionID := flag.String("session", "", "Session ID to orchestrate (orchestrator mode only)")
+	flag.Parse()
+
 	logger.EnsureDirs()
+
+	// ------------------------------------------------------------------
+	// Orchestrator mode — one-shot session execution, no scheduler, no
+	// long-running worker.  Exits after the session reaches COMPLETE.
+	// ------------------------------------------------------------------
+	if *mode == "orchestrator" {
+		if *sessionID == "" {
+			fmt.Fprintln(os.Stderr, "orchestrator mode requires -session <session_id>")
+			os.Exit(1)
+		}
+
+		orch := &orchestrator.Orchestrator{
+			Spawner:  &orchestrator.MockSpawner{},
+			Observer: &orchestrator.BarrierObserver{},
+		}
+
+		fmt.Printf("Orchestrator starting session %s...\n", *sessionID)
+		if err := orch.RunSession(*sessionID); err != nil {
+			fmt.Fprintf(os.Stderr, "orchestrator failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Orchestrator finished session successfully.")
+		return
+	}
 
 	mcpServer := mcp.NewServer(
 		&mcp.Implementation{
