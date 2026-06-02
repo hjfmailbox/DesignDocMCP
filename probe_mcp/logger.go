@@ -37,32 +37,47 @@ func writeJSONL(filename string, record map[string]any) {
 	_, _ = fmt.Fprintln(f, string(data))
 }
 
-func logServer(event string, kv ...any) {
-	rec := map[string]any{"event": event}
-	for i := 0; i+1 < len(kv); i += 2 {
-		if k, ok := kv[i].(string); ok {
-			rec[k] = kv[i+1]
-		}
-	}
-	writeJSONL("server.log", rec)
-}
-
-func logProbe(event string, kv ...any) {
-	rec := map[string]any{"event": event}
-	for i := 0; i+1 < len(kv); i += 2 {
-		if k, ok := kv[i].(string); ok {
-			rec[k] = kv[i+1]
-		}
-	}
-	writeJSONL("probe_events.log", rec)
-}
-
-func logAgentResponse(agentID, probeID, status string, detail map[string]any) {
+func logTimeline(sessionID, event, phase, taskID string) {
 	rec := map[string]any{
-		"agent_id": agentID,
-		"probe_id": probeID,
-		"status":   status,
-		"detail":   detail,
+		"session_id": sessionID,
+		"event":      event,
+		"phase":      phase,
 	}
-	writeJSONL("agent_response.log", rec)
+	if taskID != "" {
+		rec["task_id"] = taskID
+	}
+	writeJSONL("session_timeline.jsonl", rec)
+}
+
+func logPush(sessionID, phase, taskID string, retry int) {
+	rec := map[string]any{
+		"session_id": sessionID,
+		"event":      "push",
+		"phase":      phase,
+		"task_id":    taskID,
+		"retry":      retry,
+	}
+	writeJSONL("pushes.jsonl", rec)
+}
+
+func logResponse(sessionID, phase, taskID, agentID, status string) {
+	rec := map[string]any{
+		"session_id": sessionID,
+		"event":      "response",
+		"phase":      phase,
+		"task_id":    taskID,
+		"agent_id":   agentID,
+		"status":     status,
+	}
+	writeJSONL("responses.jsonl", rec)
+}
+
+func logReport(sessionID string, report map[string]any) {
+	report["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
+	report["session_id"] = sessionID
+
+	data, _ := json.MarshalIndent(report, "", "  ")
+
+	_ = os.MkdirAll(filepath.Join(probeOutputsDir, sessionID), 0755)
+	_ = os.WriteFile(filepath.Join(probeOutputsDir, sessionID, "report.json"), data, 0644)
 }

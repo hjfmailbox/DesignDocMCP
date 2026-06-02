@@ -6,248 +6,269 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const pushDelay = 5 * time.Second
+const phasePushTimeout = 30 * time.Second
 
 // ---------------------------------------------------------------------------
-// Input / Output types for generic AddTool
+// Input / Output types
 // ---------------------------------------------------------------------------
 
-type RegisterProbeAgentInput struct {
-	AgentName string `json:"agent_name"`
+type RegisterAgentInput struct {
+	Client string `json:"client"`
+	Model  string `json:"model"`
 }
 
-type RegisterProbeAgentOutput struct {
-	AgentID   string `json:"agent_id"`
-	ProbeID   string `json:"probe_id"`
-	WatchPath string `json:"watch_path"`
-	Task      struct {
-		Type        string `json:"type"`
-		Instruction string `json:"instruction"`
-	} `json:"task"`
+type RegisterAgentOutput struct {
+	AgentID     string `json:"agent_id"`
+	SessionID   string `json:"session_id"`
+	DisplayName string `json:"display_name"`
 }
 
-type WriteProbeFileInput struct {
+type PhaseSubmission struct {
 	AgentID string         `json:"agent_id"`
-	ProbeID string         `json:"probe_id"`
+	TaskID  string         `json:"task_id"`
 	Content map[string]any `json:"content,omitempty"`
 }
 
-type WriteProbeFileOutput struct {
-	Status  string `json:"status"`
-	Path    string `json:"path,omitempty"`
-	Message string `json:"message,omitempty"`
-}
+type SubmitProposalInput PhaseSubmission
+type SubmitChallengeInput PhaseSubmission
+type SubmitRevisionInput PhaseSubmission
+type SubmitConsensusInput PhaseSubmission
 
-type SubmitProbeResultInput struct {
-	AgentID string         `json:"agent_id"`
-	ProbeID string         `json:"probe_id"`
-	Result  map[string]any `json:"result"`
-}
-
-type SubmitProbeResultOutput struct {
+type SubmitPhaseOutput struct {
 	Status string `json:"status"`
+}
+
+type GenerateReportInput struct {
+	SessionID string `json:"session_id,omitempty"`
+}
+
+type GenerateReportOutput struct {
+	Report string `json:"report"`
 }
 
 // ---------------------------------------------------------------------------
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-func handleRegisterProbeAgent(_ context.Context, req *mcp.CallToolRequest, in RegisterProbeAgentInput) (*mcp.CallToolResult, RegisterProbeAgentOutput, error) {
-	agentID := fmt.Sprintf("%s_%s", in.AgentName, randomHex(8))
-	probeID := "p_" + randomHex(8)
+func handleRegisterAgent(_ context.Context, req *mcp.CallToolRequest, in RegisterAgentInput) (*mcp.CallToolResult, RegisterAgentOutput, error) {
+	session := createSession(in.Client, in.Model)
 
-	agent := &AgentProbe{
-		AgentName:    in.AgentName,
-		AgentID:      agentID,
-		ProbeID:      probeID,
-		RegisteredAt: time.Now().UTC().Format(time.RFC3339Nano),
+	logTimeline(session.SessionID, "session_created", session.Phase, "")
+
+	// Capture session reference and launch phase loop.
+	serverSession := req.Session
+	go runPhaseLoop(session, serverSession)
+
+	out := RegisterAgentOutput{
+		AgentID:     session.AgentID,
+		SessionID:   session.SessionID,
+		DisplayName: session.DisplayName,
 	}
-	registerAgent(agent)
-
-	logServer("agent_registered", "agent_name", in.AgentName, "agent_id", agentID, "probe_id", probeID)
-	logProbe("probe_created", "agent_id", agentID, "probe_id", probeID, "target_agent", in.AgentName)
-
-	// Capture session reference and dispatch push after delay.
-	session := req.Session
-	go func() {
-		time.Sleep(pushDelay)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		err := session.Log(ctx, &mcp.LoggingMessageParams{
-			Level:  mcp.LoggingLevel("info"),
-			Data:   fmt.Sprintf("Probe task ready for %s. Call write_probe_file(agent_id='%s', probe_id='%s').", in.AgentName, agentID, probeID),
-			Logger: "AgentProbeMCP",
-		})
-		if err != nil {
-			logServer("push_failed", "agent_id", agentID, "probe_id", probeID, "error", err.Error())
-			logProbe("push_failed", "agent_id", agentID, "probe_id", probeID, "error", err.Error())
-		} else {
-			logServer("push_sent", "agent_id", agentID, "probe_id", probeID, "method", "notifications/message")
-			logProbe("push_sent", "agent_id", agentID, "probe_id", probeID)
-		}
-	}()
-
-	out := RegisterProbeAgentOutput{
-		AgentID:   agentID,
-		ProbeID:   probeID,
-		WatchPath: probeOutputsDir,
-	}
-	out.Task.Type = "write_probe_file"
-	out.Task.Instruction = "Call write_probe_file to write your probe result."
-
 	return nil, out, nil
 }
 
-func handleWriteProbeFile(_ context.Context, _ *mcp.CallToolRequest, in WriteProbeFileInput) (*mcp.CallToolResult, WriteProbeFileOutput, error) {
-	if isProbeCompleted(in.ProbeID) {
-		logServer("duplicate_probe_ignored", "agent_id", in.AgentID, "probe_id", in.ProbeID)
-		logProbe("duplicate_probe_ignored", "agent_id", in.AgentID, "probe_id", in.ProbeID)
-		return nil, WriteProbeFileOutput{Status: "already_done"}, nil
-	}
-
-	agent := getAgent(in.AgentID)
-	agentName := "unknown"
-	if agent != nil {
-		agentName = agent.AgentName
-	}
-
-	filePath := filepath.Join(probeOutputsDir, fmt.Sprintf("probe_%s.json", agentName))
-
-	payload := in.Content
-	if payload == nil {
-		payload = map[string]any{
-			"agent":     agentName,
-			"agent_id":  in.AgentID,
-			"probe_id":  in.ProbeID,
-			"status":    "success",
-			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-		}
-	}
-	if _, has := payload["timestamp"]; !has {
-		payload["timestamp"] = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-
-	data, _ := json.MarshalIndent(payload, "", "  ")
-	_ = os.WriteFile(filePath, data, 0644)
-
-	markProbeCompleted(in.ProbeID)
-	if agent != nil {
-		agent.Completed = true
-	}
-
-	logServer("probe_file_written", "agent_id", in.AgentID, "probe_id", in.ProbeID, "path", filePath)
-	logAgentResponse(in.AgentID, in.ProbeID, "success", map[string]any{"path": filePath, "content": payload})
-
-	return nil, WriteProbeFileOutput{
-		Status:  "success",
-		Path:    filePath,
-		Message: fmt.Sprintf("Probe file written to %s", filePath),
-	}, nil
+func handleSubmitProposal(_ context.Context, _ *mcp.CallToolRequest, in SubmitProposalInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseProposal)
 }
 
-func handleSubmitProbeResult(_ context.Context, _ *mcp.CallToolRequest, in SubmitProbeResultInput) (*mcp.CallToolResult, SubmitProbeResultOutput, error) {
-	agent := getAgent(in.AgentID)
-	agentName := "unknown"
-	if agent != nil {
-		agentName = agent.AgentName
+func handleSubmitChallenge(_ context.Context, _ *mcp.CallToolRequest, in SubmitChallengeInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseChallenge)
+}
+
+func handleSubmitRevision(_ context.Context, _ *mcp.CallToolRequest, in SubmitRevisionInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseRevision)
+}
+
+func handleSubmitConsensus(_ context.Context, _ *mcp.CallToolRequest, in SubmitConsensusInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseConsensus)
+}
+
+func handlePhaseSubmit(agentID, taskID, expectedPhase string) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	s := getSessionByAgentID(agentID)
+	if s == nil {
+		return nil, SubmitPhaseOutput{Status: "unknown_agent"}, nil
 	}
 
-	summaryPath := filepath.Join(probeOutputsDir, "_summary.json")
-	summary := make(map[string]any)
-	if data, err := os.ReadFile(summaryPath); err == nil {
-		_ = json.Unmarshal(data, &summary)
+	// Idempotency check.
+	if s.IsPhaseCompleted(taskID) {
+		logResponse(s.SessionID, expectedPhase, taskID, agentID, "duplicate")
+		return nil, SubmitPhaseOutput{Status: "already_done"}, nil
 	}
 
-	existing, hasExisting := summary[in.AgentID]
-	record := map[string]any{
-		"agent":     agentName,
-		"agent_id":  in.AgentID,
-		"probe_id":  in.ProbeID,
-		"result":    in.Result,
-		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+	// Phase + task validation.
+	if s.GetPhase() != expectedPhase {
+		logResponse(s.SessionID, expectedPhase, taskID, agentID, "wrong_phase")
+		return nil, SubmitPhaseOutput{Status: fmt.Sprintf("wrong_phase: expected %s, got %s", expectedPhase, s.GetPhase())}, nil
+	}
+	if s.GetCurrentTaskID() != taskID {
+		logResponse(s.SessionID, expectedPhase, taskID, agentID, "wrong_task_id")
+		return nil, SubmitPhaseOutput{Status: "wrong_task_id"}, nil
 	}
 
-	if hasExisting {
-		if m, ok := existing.(map[string]any); ok {
-			record["previous_timestamp"] = m["timestamp"]
+	s.MarkPhaseCompleted(taskID)
+	s.NotifyResponse()
+
+	logResponse(s.SessionID, expectedPhase, taskID, agentID, "success")
+	return nil, SubmitPhaseOutput{Status: "success"}, nil
+}
+
+func handleGenerateReport(_ context.Context, _ *mcp.CallToolRequest, in GenerateReportInput) (*mcp.CallToolResult, GenerateReportOutput, error) {
+	var sessionsList []*DebateSession
+	if in.SessionID != "" {
+		if s := getSession(in.SessionID); s != nil {
+			sessionsList = append(sessionsList, s)
 		}
-		logServer("duplicate_submit", "agent_id", in.AgentID, "probe_id", in.ProbeID)
 	} else {
-		logServer("result_submitted", "agent_id", in.AgentID, "probe_id", in.ProbeID)
+		sessionsList = getAllSessions()
 	}
 
-	summary[in.AgentID] = record
-	data, _ := json.MarshalIndent(summary, "", "  ")
-	_ = os.WriteFile(summaryPath, data, 0644)
-
-	if agent != nil {
-		agent.ResultSubmitted = true
-	}
-
-	status := "success"
-	if hasExisting {
-		status = "already_recorded"
-	}
-	logAgentResponse(in.AgentID, in.ProbeID, status, map[string]any{"result": in.Result})
-
-	return nil, SubmitProbeResultOutput{Status: status}, nil
-}
-
-type ProbeReportOutput struct {
-	Report string `json:"report"`
-}
-
-func handleGenerateProbeReport(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ProbeReportOutput, error) {
 	var rows []string
-	for _, agent := range getAllAgents() {
-		filePath := filepath.Join(probeOutputsDir, fmt.Sprintf("probe_%s.json", agent.AgentName))
-		_, err := os.Stat(filePath)
-		fileExists := err == nil
-		duplicateSafe := isProbeCompleted(agent.ProbeID)
+	for _, s := range sessionsList {
+		pc := s.PhaseCompletions
 
 		result := "FAIL"
-		if fileExists && duplicateSafe {
+		if s.GetPhase() == PhaseComplete {
 			result = "PASS"
 		}
 
-		row := fmt.Sprintf("| %s | Yes | Unknown | %s | %s | %s |",
-			agent.AgentName,
-			boolStr(fileExists),
-			boolStr(duplicateSafe),
+		row := fmt.Sprintf("| %s | %s | %s | %s | %s | %s | %s | %s |",
+			s.DisplayName,
+			boolStr(s.Client != ""),
+			boolStr(s.GetPhase() != PhaseRegistered && s.GetPhase() != PhaseFailedTimeout),
+			boolStr(pc[PhaseProposal]),
+			boolStr(pc[PhaseChallenge]),
+			boolStr(pc[PhaseRevision]),
+			boolStr(pc[PhaseConsensus]),
 			result,
 		)
 		rows = append(rows, row)
 	}
 
-	header := "| Agent | Connected | Push Received | File Written | Duplicate Safe | Result |"
-	sep := "|---|---|---|---|---|---|"
+	header := "| Agent | Registered | Active | Proposal | Challenge | Revision | Consensus | Result |"
+	sep := "|---|---|---|---|---|---|---|---|"
 
 	var body string
 	if len(rows) == 0 {
-		body = "| (none) | - | - | - | - | - |\n"
+		body = "| (none) | - | - | - | - | - | - | - |\n"
 	} else {
 		body = strings.Join(rows, "\n") + "\n"
 	}
 
 	report := fmt.Sprintf(
-		"# Agent Probe Report\n\n%s\n%s\n%s\n\n**Notes**\n"+
-			"- *Push Received*: Server-side push notifications were dispatched, "+
-			"but receipt can only be confirmed client-side.\n"+
-			"- *Duplicate Safe*: Idempotency verified (repeated calls did not duplicate state).\n",
+		"# Mini Debate Runtime Report\n\n%s\n%s\n%s\n\n**Notes**\n"+
+			"- *Active*: Session is not in REGISTERED or FAILED_TIMEOUT state.\n"+
+			"- Phases are verified server-side by push-response loop.\n",
 		header, sep, body,
 	)
 
-	logServer("report_generated", "agent_count", len(rows))
-	return nil, ProbeReportOutput{Report: report}, nil
+	return nil, GenerateReportOutput{Report: report}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Phase loop
+// ---------------------------------------------------------------------------
+
+func runPhaseLoop(s *DebateSession, serverSession *mcp.ServerSession) {
+	phases := []string{PhaseProposal, PhaseChallenge, PhaseRevision, PhaseConsensus}
+	actionMap := map[string]string{
+		PhaseProposal:  "submit_proposal",
+		PhaseChallenge: "submit_challenge",
+		PhaseRevision:  "submit_revision",
+		PhaseConsensus: "submit_consensus",
+	}
+
+	for _, phase := range phases {
+		s.SetPhase(phase)
+		taskID := "task_" + randomHex(6)
+		s.SetCurrentTaskID(taskID)
+		s.SetRetryCount(0)
+		s.ResetResponseCh()
+
+		logTimeline(s.SessionID, "phase_started", phase, taskID)
+
+		responded := false
+		for retry := 0; retry <= 3; retry++ {
+			s.SetRetryCount(retry)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			pushData := map[string]any{
+				"phase":           phase,
+				"task_id":         taskID,
+				"required_action": actionMap[phase],
+				"retry":           retry,
+			}
+			pushJSON, _ := json.Marshal(pushData)
+
+			err := serverSession.Log(ctx, &mcp.LoggingMessageParams{
+				Level:  mcp.LoggingLevel("info"),
+				Data:   string(pushJSON),
+				Logger: "MiniDebateRuntime",
+			})
+			cancel()
+
+			if err != nil {
+				logPush(s.SessionID, phase, taskID, retry)
+				logTimeline(s.SessionID, "push_failed", phase, taskID)
+			} else {
+				logPush(s.SessionID, phase, taskID, retry)
+			}
+
+			select {
+			case <-s.ResponseCh:
+				responded = true
+				logTimeline(s.SessionID, "phase_completed", phase, taskID)
+				break
+			case <-time.After(phasePushTimeout):
+				// timeout, continue to next retry
+			}
+			if responded {
+				break
+			}
+		}
+
+		if !responded {
+			s.SetPhase(PhaseFailedTimeout)
+			logTimeline(s.SessionID, "phase_timeout", phase, taskID)
+			writeReport(s, "FAIL")
+			return
+		}
+	}
+
+	s.SetPhase(PhaseComplete)
+	logTimeline(s.SessionID, "session_complete", PhaseComplete, "")
+	writeReport(s, "PASS")
+}
+
+func writeReport(s *DebateSession, result string) {
+	pc := s.PhaseCompletions
+	report := map[string]any{
+		"agent":      s.DisplayName,
+		"client":     s.Client,
+		"model":      s.Model,
+		"session_id": s.SessionID,
+		"connected":  true,
+		"proposal":   pc[PhaseProposal],
+		"challenge":  pc[PhaseChallenge],
+		"revision":   pc[PhaseRevision],
+		"consensus":  pc[PhaseConsensus],
+		"result":     result,
+	}
+
+	// For completed sessions, we know all phases passed.
+	if result == "PASS" {
+		report["proposal"] = true
+		report["challenge"] = true
+		report["revision"] = true
+		report["consensus"] = true
+	}
+
+	logReport(s.SessionID, report)
 }
 
 // ---------------------------------------------------------------------------
