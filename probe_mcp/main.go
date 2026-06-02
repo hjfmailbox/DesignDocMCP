@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -49,6 +53,11 @@ func main() {
 	}, handleSubmitConsensus)
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_runtime_status",
+		Description: "Query current session status for the given agent. Returns phase, task_id, and whether a submit is needed.",
+	}, handleGetRuntimeStatus)
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "generate_report",
 		Description: "Generate a Markdown debate runtime report by scanning sessions and logs.",
 	}, handleGenerateReport)
@@ -87,8 +96,26 @@ func main() {
 	fmt.Printf("Outputs dir: %s\n", probeOutputsDir)
 	fmt.Printf("Logs dir: %s\n", logsDir)
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	srv := &http.Server{Addr: addr, Handler: handler}
+
+	// Graceful shutdown on SIGINT / SIGTERM.
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+		<-sigCh
+
+		fmt.Println("\nShutting down gracefully...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "shutdown error: %v\n", err)
+		}
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Println("Server stopped.")
 }

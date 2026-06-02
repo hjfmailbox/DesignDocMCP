@@ -37,9 +37,19 @@ var (
 	sessions   = make(map[string]*DebateSession) // key: SessionID
 )
 
-func createSession(client, model string) *DebateSession {
+func getOrCreateSession(client, model string) (*DebateSession, bool) {
 	sessionsMu.Lock()
 	defer sessionsMu.Unlock()
+
+	// Idempotency: reuse existing active session for same client+model.
+	for _, s := range sessions {
+		if s.Client == client && s.Model == model {
+			phase := s.Phase
+			if phase != PhaseComplete && phase != PhaseFailedTimeout {
+				return s, false
+			}
+		}
+	}
 
 	sessionID := "sess_" + randomHex(8)
 	agentID := fmt.Sprintf("%s_%s", client, randomHex(8))
@@ -56,6 +66,11 @@ func createSession(client, model string) *DebateSession {
 		PhaseCompletions: make(map[string]bool),
 	}
 	sessions[sessionID] = s
+	return s, true
+}
+
+func createSession(client, model string) *DebateSession {
+	s, _ := getOrCreateSession(client, model)
 	return s
 }
 

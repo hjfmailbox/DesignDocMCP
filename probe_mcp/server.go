@@ -52,18 +52,33 @@ type GenerateReportOutput struct {
 	Report string `json:"report"`
 }
 
+type GetRuntimeStatusInput struct {
+	AgentID string `json:"agent_id"`
+}
+
+type GetRuntimeStatusOutput struct {
+	Registered  bool   `json:"registered"`
+	SessionID   string `json:"session_id"`
+	AgentID     string `json:"agent_id"`
+	DisplayName string `json:"display_name"`
+	Phase       string `json:"phase"`
+	TaskID      string `json:"task_id"`
+	NeedsSubmit bool   `json:"needs_submit"`
+}
+
 // ---------------------------------------------------------------------------
 // Tool handlers
 // ---------------------------------------------------------------------------
 
 func handleRegisterAgent(_ context.Context, req *mcp.CallToolRequest, in RegisterAgentInput) (*mcp.CallToolResult, RegisterAgentOutput, error) {
-	session := createSession(in.Client, in.Model)
+	session, isNew := getOrCreateSession(in.Client, in.Model)
 
-	logTimeline(session.SessionID, "session_created", session.Phase, "")
-
-	// Capture session reference and launch phase loop.
-	serverSession := req.Session
-	go runPhaseLoop(session, serverSession)
+	if isNew {
+		logTimeline(session.SessionID, "session_created", session.Phase, "")
+		// Capture session reference and launch phase loop.
+		serverSession := req.Session
+		go runPhaseLoop(session, serverSession)
+	}
 
 	out := RegisterAgentOutput{
 		AgentID:     session.AgentID,
@@ -116,6 +131,32 @@ func handlePhaseSubmit(agentID, taskID, expectedPhase string) (*mcp.CallToolResu
 
 	logResponse(s.SessionID, expectedPhase, taskID, agentID, "success")
 	return nil, SubmitPhaseOutput{Status: "success"}, nil
+}
+
+func handleGetRuntimeStatus(_ context.Context, _ *mcp.CallToolRequest, in GetRuntimeStatusInput) (*mcp.CallToolResult, GetRuntimeStatusOutput, error) {
+	s := getSessionByAgentID(in.AgentID)
+	if s == nil {
+		out := GetRuntimeStatusOutput{Registered: false}
+		return nil, out, nil
+	}
+
+	phase := s.GetPhase()
+	taskID := s.GetCurrentTaskID()
+	needsSubmit := false
+	if phase == PhaseProposal || phase == PhaseChallenge || phase == PhaseRevision || phase == PhaseConsensus {
+		needsSubmit = !s.IsPhaseCompleted(taskID)
+	}
+
+	out := GetRuntimeStatusOutput{
+		Registered:  true,
+		SessionID:   s.SessionID,
+		AgentID:     s.AgentID,
+		DisplayName: s.DisplayName,
+		Phase:       phase,
+		TaskID:      taskID,
+		NeedsSubmit: needsSubmit,
+	}
+	return nil, out, nil
 }
 
 func handleGenerateReport(_ context.Context, _ *mcp.CallToolRequest, in GenerateReportInput) (*mcp.CallToolResult, GenerateReportOutput, error) {
