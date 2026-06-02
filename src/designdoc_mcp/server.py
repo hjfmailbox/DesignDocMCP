@@ -1173,7 +1173,7 @@ def force_skip_clarification(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def heartbeat(session_id: str, agent_id: str) -> dict[str, Any]:
-    """Send a heartbeat to indicate the agent is still active.
+    """DEPRECATED: Send a heartbeat to indicate the agent is still active.
 
     Agents should call this periodically (e.g., every 60 seconds) during long-running
     operations to prevent being marked as inactive. An agent is considered inactive
@@ -1195,7 +1195,7 @@ def heartbeat(session_id: str, agent_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def wait_for_task(session_id: str, agent_id: str, timeout: int = WAIT_FOR_TASK_TIMEOUT) -> dict[str, Any]:
-    """Blocking pull: wait for the next task assigned to this agent.
+    """DEPRECATED: Blocking pull: wait for the next task assigned to this agent.
 
     This is the CORE protocol of the system. Instead of polling or being pushed,
     agents block-wait for tasks. The server assigns tasks based on the current
@@ -1229,7 +1229,7 @@ def wait_for_task(session_id: str, agent_id: str, timeout: int = WAIT_FOR_TASK_T
 
 @mcp.tool()
 def submit_result(session_id: str, agent_id: str, task_id: str, result: dict[str, Any]) -> dict[str, Any]:
-    """Submit the result of a task and get the next task.
+    """DEPRECATED: Submit the result of a task and get the next task.
 
     This is the unified submission interface. After completing a task obtained
     from wait_for_task, submit the result here. The system will:
@@ -1265,7 +1265,7 @@ def submit_result(session_id: str, agent_id: str, task_id: str, result: dict[str
 
 @mcp.tool()
 def check_stalled(session_id: str) -> dict[str, Any]:
-    """Check if a session is stalled due to inactive agents and attempt recovery.
+    """DEPRECATED: Check if a session is stalled due to inactive agents and attempt recovery.
 
     This tool detects agents that have been inactive for more than 5 minutes
     (no heartbeat or submission) and marks them as inactive. If enough active
@@ -1519,11 +1519,254 @@ Detection is server-side from the MCP handshake (clientInfo.name), your `client_
     return guide
 
 
-def main() -> None:
-    import argparse
+def _setup_logging() -> Path:
+    """Configure file logging shared by server and orchestrator modes."""
+    log_dir = os.environ.get("DESIGNDOC_LOG_DIR", "")
+    if not log_dir:
+        log_dir = str(Path(__file__).resolve().parent.parent.parent / "logs")
+    log_path = Path(log_dir)
+    log_path.mkdir(parents=True, exist_ok=True)
+
+    log_fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    sess_fmt = logging.Formatter("%(asctime)s %(message)s")
+
+    main_handler = logging.handlers.TimedRotatingFileHandler(
+        log_path / "designdoc_mcp.log",
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+    )
+    main_handler.setLevel(logging.INFO)
+    main_handler.setFormatter(log_fmt)
+    main_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
+    logging.getLogger().addHandler(main_handler)
+
+    debug_handler = logging.handlers.TimedRotatingFileHandler(
+        log_path / "debug.log",
+        when="midnight",
+        interval=1,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    debug_handler.setLevel(logging.DEBUG)
+    debug_handler.setFormatter(log_fmt)
+    debug_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
+    logging.getLogger().addHandler(debug_handler)
+
+    sess_handler = logging.handlers.TimedRotatingFileHandler(
+        log_path / "session-events.log",
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+    )
+    sess_handler.setLevel(logging.INFO)
+    sess_handler.setFormatter(sess_fmt)
+    sess_logger = logging.getLogger("designdoc_mcp.session")
+    sess_logger.addHandler(sess_handler)
+    sess_logger.propagate = False
+
+    hb_handler = logging.handlers.TimedRotatingFileHandler(
+        log_path / "heartbeat.log",
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+    )
+    hb_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+    hb_logger = logging.getLogger("designdoc_mcp.heartbeat")
+    hb_logger.addHandler(hb_handler)
+    hb_logger.propagate = False
+
+    logging.getLogger("uvicorn").addHandler(main_handler)
+    logging.getLogger("uvicorn.access").addHandler(main_handler)
+    logging.getLogger().setLevel(logging.DEBUG)
+    return log_path
+
+
+def _run_server(args) -> None:
+    """Run in server mode: FastMCP + optional Web UI."""
+    if args.transport == "stdio":
+        mcp.run(transport="stdio")
+        return
+
+    from contextlib import asynccontextmanager, AsyncExitStack
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+    from .web import web_app
+
+    sse_app = mcp.http_app(transport="sse")
+    http_app = mcp.http_app(transport="streamable-http")
+
+    routes = list(sse_app.routes) + list(http_app.routes)
+
+    if not args.no_web:
+        routes.append(Mount("/", app=web_app))
+
+    @asynccontextmanager
+    async def combined_lifespan(app):
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(sse_app.lifespan(app))
+            await stack.enter_async_context(http_app.lifespan(app))
+            yield
+
+    app = Starlette(routes=routes, lifespan=combined_lifespan)
+
+    log_path = _setup_logging()
+    logger.info("DesignDoc MCP server starting - logs: %s", log_path)
+    logger.info("MCP endpoints: SSE=GET /sse + POST /messages, StreamableHTTP=POST /mcp")
+
+    import mcp.shared.session as _mcp_session
+    _original_respond = _mcp_session.RequestResponder.respond
+
+    async def _safe_respond(self, response):
+        if getattr(self, "_completed", False):
+            logger.warning(
+                "Suppressed duplicate respond for request %s "
+                "(FastMCP streamable-http concurrent bug)",
+                getattr(self, "request_id", "?"),
+            )
+            return
+        return await _original_respond(self, response)
+
+    _mcp_session.RequestResponder.respond = _safe_respond
+
+    import signal
     import uvicorn
 
-    parser = argparse.ArgumentParser(description="DesignDoc MCP Server")
+    config = uvicorn.Config(app, host=args.host, port=args.port, timeout_graceful_shutdown=1)
+    server = uvicorn.Server(config)
+
+    def _force_quit(sig, frame):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _force_quit)
+    try:
+        server.run()
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("DesignDoc MCP server stopped")
+
+
+def _run_orchestrator(args) -> None:
+    """Run in orchestrator mode: drive debate via external agent processes."""
+    import asyncio
+    import signal
+    import uvicorn
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+
+    from . import state as shared_state
+    from .orchestrator import Orchestrator, AgentConfig
+    from .web import web_app
+
+    log_path = _setup_logging()
+    logger.info("DesignDoc Orchestrator starting - logs: %s", log_path)
+
+    engine = shared_state._get_engine()
+    store = shared_state._get_store()
+
+    agents_env = os.environ.get("DESIGNDOC_ORCHESTRATOR_AGENTS", "[]")
+    try:
+        agents_data = json.loads(agents_env)
+    except json.JSONDecodeError as exc:
+        logger.error("Invalid DESIGNDOC_ORCHESTRATOR_AGENTS JSON: %s", exc)
+        raise SystemExit(1)
+
+    agent_configs = [AgentConfig(**a) for a in agents_data]
+    if not agent_configs:
+        logger.error("No agents configured. Set DESIGNDOC_ORCHESTRATOR_AGENTS env var.")
+        raise SystemExit(1)
+
+    logger.info("Loaded %d agent configs", len(agent_configs))
+
+    session_id = os.environ.get("DESIGNDOC_ORCHESTRATOR_SESSION_ID", "")
+    if session_id:
+        session = store.get_session(session_id)
+        if session is None:
+            logger.error("Session %s not found", session_id)
+            raise SystemExit(1)
+    else:
+        sessions = store.list_sessions()
+        active = [s for s in sessions if s.status not in (SessionStatus.COMPLETED, SessionStatus.ARCHIVED)]
+        if active:
+            session = active[0]
+            session_id = session.session_id
+            logger.info("Auto-discovered session: %s (%s)", session_id, session.title)
+        else:
+            title = os.environ.get("DESIGNDOC_ORCHESTRATOR_TITLE", "Orchestrated Debate")
+            description = os.environ.get("DESIGNDOC_ORCHESTRATOR_DESCRIPTION", "Auto-created session")
+            session = engine.create_session(title=title, description=description)
+            session_id = session.session_id
+            logger.info("Created new session: %s", session_id)
+
+            req = os.environ.get("DESIGNDOC_ORCHESTRATOR_REQUIREMENT", "")
+            if req:
+                engine.submit_requirement(session_id, problem_statement=req)
+                logger.info("Submitted requirement to session %s", session_id)
+
+            for cfg in agent_configs:
+                engine.register_agent(
+                    session_id=session_id,
+                    name=cfg.name,
+                    agent_identity=cfg.agent_id,
+                )
+            logger.info("Registered %d agents in session %s", len(agent_configs), session_id)
+
+    orchestrator = Orchestrator(engine, agent_configs)
+
+    async def _orchestrate():
+        try:
+            await orchestrator.run_session(session_id)
+        except Exception:
+            logger.exception("Orchestrator failed")
+            raise
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    orchestrate_task = loop.create_task(_orchestrate())
+
+    web_server_task = None
+    if not args.no_web:
+        routes = [Mount("/", app=web_app)]
+        app = Starlette(routes=routes)
+        config = uvicorn.Config(app, host=args.host, port=args.port, timeout_graceful_shutdown=1, loop="asyncio")
+        server = uvicorn.Server(config)
+        web_server_task = loop.create_task(server.serve())
+        logger.info("Web UI available at http://%s:%d", args.host, args.port)
+
+    def _shutdown(sig, frame):
+        logger.info("Shutting down orchestrator...")
+        orchestrator.shutdown()
+        if web_server_task:
+            web_server_task.cancel()
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    try:
+        if web_server_task:
+            loop.run_until_complete(asyncio.gather(orchestrate_task, web_server_task, return_exceptions=True))
+        else:
+            loop.run_until_complete(orchestrate_task)
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        loop.close()
+        logger.info("DesignDoc Orchestrator stopped")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="DesignDoc MCP Server / Orchestrator")
+    parser.add_argument(
+        "--mode",
+        choices=["server", "orchestrator"],
+        default=os.environ.get("DESIGNDOC_MODE", "server"),
+        help="Run mode: server (MCP+WebUI) or orchestrator (WebUI+Orchestrator)",
+    )
     parser.add_argument(
         "--transport",
         choices=["stdio", "sse", "http", "streamable-http"],
@@ -1533,153 +1776,26 @@ def main() -> None:
     parser.add_argument(
         "--host",
         default=os.environ.get("DESIGNDOC_HOST", "0.0.0.0"),
-        help="Host for SSE/HTTP transport (default: 0.0.0.0)",
+        help="Host for SSE/HTTP/Web transport (default: 0.0.0.0)",
     )
     parser.add_argument(
         "--port",
         type=int,
         default=int(os.environ.get("DESIGNDOC_PORT", "8765")),
-        help="Port for SSE/HTTP transport (default: 8765)",
+        help="Port for SSE/HTTP/Web transport (default: 8765)",
     )
     parser.add_argument(
         "--no-web",
         action="store_true",
         default=os.environ.get("DESIGNDOC_NO_WEB", "") == "1",
-        help="Disable web UI (only MCP endpoints)",
+        help="Disable web UI",
     )
     args = parser.parse_args()
 
-    if args.transport == "stdio":
-        mcp.run(transport="stdio")
+    if args.mode == "orchestrator":
+        _run_orchestrator(args)
     else:
-        import logging
-        from contextlib import asynccontextmanager, AsyncExitStack
-
-        from starlette.applications import Starlette
-        from starlette.routing import Mount
-
-        from .web import web_app
-
-        sse_app = mcp.http_app(transport="sse")
-        http_app = mcp.http_app(transport="streamable-http")
-
-        routes = list(sse_app.routes) + list(http_app.routes)
-
-        if not args.no_web:
-            routes.append(Mount("/", app=web_app))
-
-        @asynccontextmanager
-        async def combined_lifespan(app):
-            async with AsyncExitStack() as stack:
-                await stack.enter_async_context(sse_app.lifespan(app))
-                await stack.enter_async_context(http_app.lifespan(app))
-                yield
-
-        app = Starlette(routes=routes, lifespan=combined_lifespan)
-
-        log_dir = os.environ.get("DESIGNDOC_LOG_DIR", "")
-        if not log_dir:
-            log_dir = str(Path(__file__).resolve().parent.parent.parent / "logs")
-        log_path = Path(log_dir)
-        log_path.mkdir(parents=True, exist_ok=True)
-
-        log_fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-        sess_fmt = logging.Formatter("%(asctime)s %(message)s")
-
-        # ---- 主日志 (INFO+, 按天轮转, 保留7天) ----
-        main_handler = logging.handlers.TimedRotatingFileHandler(
-            log_path / "designdoc_mcp.log",
-            when="midnight",
-            interval=1,
-            backupCount=7,
-            encoding="utf-8",
-        )
-        main_handler.setLevel(logging.INFO)
-        main_handler.setFormatter(log_fmt)
-        main_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
-        logging.getLogger().addHandler(main_handler)
-
-        # ---- DEBUG 日志 (DEBUG+, 按天轮转, 保留3天) ----
-        debug_handler = logging.handlers.TimedRotatingFileHandler(
-            log_path / "debug.log",
-            when="midnight",
-            interval=1,
-            backupCount=3,
-            encoding="utf-8",
-        )
-        debug_handler.setLevel(logging.DEBUG)
-        debug_handler.setFormatter(log_fmt)
-        debug_handler.addFilter(lambda r: not r.name.startswith("designdoc_mcp.heartbeat"))
-        logging.getLogger().addHandler(debug_handler)
-
-        # ---- Session 诊断日志 (独立文件, 保留7天) ----
-        sess_handler = logging.handlers.TimedRotatingFileHandler(
-            log_path / "session-events.log",
-            when="midnight",
-            interval=1,
-            backupCount=7,
-            encoding="utf-8",
-        )
-        sess_handler.setLevel(logging.INFO)
-        sess_handler.setFormatter(sess_fmt)
-        sess_logger = logging.getLogger("designdoc_mcp.session")
-        sess_logger.addHandler(sess_handler)
-        sess_logger.propagate = False
-
-        # ---- 心跳日志（单独文件, 保留7天） ----
-        hb_handler = logging.handlers.TimedRotatingFileHandler(
-            log_path / "heartbeat.log",
-            when="midnight",
-            interval=1,
-            backupCount=7,
-            encoding="utf-8",
-        )
-        hb_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
-        hb_logger = logging.getLogger("designdoc_mcp.heartbeat")
-        hb_logger.addHandler(hb_handler)
-        hb_logger.propagate = False
-
-        logging.getLogger("uvicorn").addHandler(main_handler)
-        logging.getLogger("uvicorn.access").addHandler(main_handler)
-        logging.getLogger().setLevel(logging.DEBUG)
-        logger.info("DesignDoc MCP server starting - logs: %s", log_path)
-        logger.info("MCP endpoints: SSE=GET /sse + POST /messages, StreamableHTTP=POST /mcp")
-
-        # --- FastMCP streamable-http concurrent-request bug workaround ---
-        # fastmcp 3.3.1 (mcp 1.x) can crash with AssertionError:
-        #   "Request already responded to"
-        # when multiple concurrent requests hit the same streamable-http session.
-        # Patch RequestResponder.respond to silently drop duplicate responses.
-        import mcp.shared.session as _mcp_session
-
-        _original_respond = _mcp_session.RequestResponder.respond
-
-        async def _safe_respond(self, response):
-            if getattr(self, "_completed", False):
-                logger.warning(
-                    "Suppressed duplicate respond for request %s "
-                    "(FastMCP streamable-http concurrent bug)",
-                    getattr(self, "request_id", "?"),
-                )
-                return
-            return await _original_respond(self, response)
-
-        _mcp_session.RequestResponder.respond = _safe_respond
-        # --- end workaround ---
-
-        import signal
-
-        config = uvicorn.Config(app, host=args.host, port=args.port, timeout_graceful_shutdown=1)
-        server = uvicorn.Server(config)
-
-        def _force_quit(sig, frame):
-            raise SystemExit(0)
-
-        signal.signal(signal.SIGINT, _force_quit)
-        try:
-            server.run()
-        except (KeyboardInterrupt, SystemExit):
-            logger.info("DesignDoc MCP server stopped")
+        _run_server(args)
 
 
 if __name__ == "__main__":
