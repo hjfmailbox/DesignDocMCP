@@ -17,40 +17,22 @@ import (
 	"github.com/fluorine/designdoc-mcp/probe/internal/orchestrator"
 	"github.com/fluorine/designdoc-mcp/probe/internal/scheduler"
 	"github.com/fluorine/designdoc-mcp/probe/internal/server"
+	"github.com/fluorine/designdoc-mcp/probe/internal/state"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
 	mode := flag.String("mode", "server", "Run mode: server or orchestrator")
 	sessionID := flag.String("session", "", "Session ID to orchestrate (orchestrator mode only)")
+	spawnerFlag := flag.String("spawner", "mock", "Spawner type: mock or cli (orchestrator mode only)")
+	delaySec := flag.Int("delay", 0, "Seconds to wait before starting orchestration (allows agents to register)")
 	flag.Parse()
 
 	logger.EnsureDirs()
 
 	// ------------------------------------------------------------------
-	// Orchestrator mode — one-shot session execution, no scheduler, no
-	// long-running worker.  Exits after the session reaches COMPLETE.
+	// MCP server setup (shared by both modes)
 	// ------------------------------------------------------------------
-	if *mode == "orchestrator" {
-		if *sessionID == "" {
-			fmt.Fprintln(os.Stderr, "orchestrator mode requires -session <session_id>")
-			os.Exit(1)
-		}
-
-		orch := &orchestrator.Orchestrator{
-			Spawner:  &orchestrator.MockSpawner{},
-			Observer: &orchestrator.BarrierObserver{},
-		}
-
-		fmt.Printf("Orchestrator starting session %s...\n", *sessionID)
-		if err := orch.RunSession(*sessionID); err != nil {
-			fmt.Fprintf(os.Stderr, "orchestrator failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("Orchestrator finished session successfully.")
-		return
-	}
-
 	mcpServer := mcp.NewServer(
 		&mcp.Implementation{
 			Name:    "MiniDebateRuntime",
@@ -127,9 +109,62 @@ func main() {
 	addr := "127.0.0.1:8799"
 	logger.LogTimeline("", "startup", "", "")
 
-	scheduler.StartScheduler()
+	// ------------------------------------------------------------------
+	// Mode-specific setup
+	// ------------------------------------------------------------------
+	if *mode == "orchestrator" {
+		var spawner orchestrator.Spawner
+		switch *spawnerFlag {
+		case "cli":
+			spawner = &orchestrator.CLISpawner{}
+		case "mock":
+			spawner = &orchestrator.MockSpawner{}
+		default:
+			fmt.Fprintf(os.Stderr, "unknown spawner %q, use mock or cli\n", *spawnerFlag)
+			os.Exit(1)
+		}
+
+		orch := &orchestrator.Orchestrator{
+			Spawner:  spawner,
+			Observer: &orchestrator.BarrierObserver{},
+		}
+
+		// Start orchestrator in a goroutine so the HTTP server can accept
+		// connections from spawned agent processes.
+		go func() {
+			if *delaySec > 0 {
+				fmt.Printf("Orchestrator waiting %ds for agents to register...\n", *delaySec)
+				time.Sleep(time.Duration(*delaySec) * time.Second)
+			}
+
+			// Auto-discover session if not provided (or "auto").
+			sid := *sessionID
+			if sid == "" || sid == "auto" {
+				for {
+					sessions := state.GetActiveSessions()
+					if len(sessions) > 0 {
+						sid = sessions[0].SessionID
+						fmt.Printf("Auto-discovered session: %s\n", sid)
+						break
+					}
+					fmt.Println("Waiting for session...")
+					time.Sleep(2 * time.Second)
+				}
+			}
+
+			fmt.Printf("Orchestrator starting session %s...\n", sid)
+			if err := orch.RunSession(sid); err != nil {
+				fmt.Fprintf(os.Stderr, "orchestrator failed: %v\n", err)
+			} else {
+				fmt.Println("Orchestrator finished session successfully.")
+			}
+		}()
+	} else {
+		scheduler.StartScheduler()
+		fmt.Println("Scheduler started")
+	}
+
 	fmt.Println("MiniDebateRuntime started")
-	fmt.Println("Scheduler started")
 	fmt.Println("MCP Endpoint: http://127.0.0.1:8799/mcp")
 	fmt.Println("Admin UI:     http://127.0.0.1:8799/ui")
 	fmt.Printf("Outputs dir:  %s\n", logger.ProbeOutputsDir)
