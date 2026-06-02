@@ -40,6 +40,23 @@ logs/
 .playwright-mcp/
 
 # Go build artifacts
-mcp-gateway.exe
-mcp-gateway.exe~
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+
+# Probe MCP build artifacts
+probe_mcp/mini-debate-runtime.exe
+probe_mcp/mini-debate-runtime.exe~
+probe_mcp/probe.exe
+probe_mcp/server.log
+probe_mcp/logs/
+
+# IDE personal settings
+.idea/
+*.swp
+*.swo
+*~
 

@@ -481,8 +481,8 @@ func RegisterAllTools(s *mcp.Server, pc *proxy.Client) {
 		Name:        "submit_decision_points",
 		Description: "Submit decision points for a session.",
 		InputSchema: objectSchema(map[string]any{
-			"session_id":     map[string]any{"type": "string", "description": "Session ID"},
-			"agent_id":       map[string]any{"type": "string", "description": "Agent ID"},
+			"session_id":      map[string]any{"type": "string", "description": "Session ID"},
+			"agent_id":        map[string]any{"type": "string", "description": "Agent ID"},
 			"decision_points": map[string]any{"type": "array", "description": "Decision points list"},
 		}, []string{"session_id", "agent_id", "decision_points"}),
 	}, makeProxyHandler(pc, "/api/v1/submit_decision_points"))
@@ -502,8 +502,8 @@ func RegisterAllTools(s *mcp.Server, pc *proxy.Client) {
 		Name:        "supplement_assumption_options",
 		Description: "Supplement assumption options during clarification.",
 		InputSchema: objectSchema(map[string]any{
-			"session_id": map[string]any{"type": "string", "description": "Session ID"},
-			"agent_id":   map[string]any{"type": "string", "description": "Agent ID"},
+			"session_id":  map[string]any{"type": "string", "description": "Session ID"},
+			"agent_id":    map[string]any{"type": "string", "description": "Agent ID"},
 			"supplements": map[string]any{"type": "array", "description": "Supplements list"},
 		}, []string{"session_id", "agent_id", "supplements"}),
 	}, makeProxyHandler(pc, "/api/v1/supplement_assumption_options"))

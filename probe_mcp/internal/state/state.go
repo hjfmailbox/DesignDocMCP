@@ -1,4 +1,4 @@
-package main
+package state
 
 import (
 	"crypto/rand"
@@ -110,21 +110,21 @@ func (t *PhaseTask) MarkResponded() {
 type MultiAgentSession struct {
 	SessionID       string
 	Phase           string
-	Agents          map[string]*Agent     // key: agent_id
-	AgentOrder      []string              // registration order for challenge topology
+	Agents          map[string]*Agent // key: agent_id
+	AgentOrder      []string          // registration order for challenge topology
 	PhaseStartedAt  time.Time
 	PhaseDeadline   time.Time
 	Tasks           map[string]*PhaseTask // key: task_id
 	CompletedPhases map[string]bool
 	Completed       bool
-	ManuallyStarted bool                  // UI-controlled start gate
+	ManuallyStarted bool // UI-controlled start gate
 	CreatedAt       time.Time
 	mu              sync.RWMutex
 }
 
-func newSession() *MultiAgentSession {
+func NewSession() *MultiAgentSession {
 	return &MultiAgentSession{
-		SessionID:       "sess_" + randomHex(8),
+		SessionID:       "sess_" + RandomHex(8),
 		Phase:           PhaseRegistered,
 		Agents:          make(map[string]*Agent),
 		Tasks:           make(map[string]*PhaseTask),
@@ -137,7 +137,7 @@ func (s *MultiAgentSession) AddAgent(client, model string) *Agent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	agentID := fmt.Sprintf("%s_%s", client, randomHex(8))
+	agentID := fmt.Sprintf("%s_%s", client, RandomHex(8))
 	a := &Agent{
 		AgentID:     agentID,
 		Client:      client,
@@ -316,7 +316,7 @@ var (
 	sessions   = make(map[string]*MultiAgentSession)
 )
 
-func getOrCreateSessionForAgent(client, model string) (*MultiAgentSession, *Agent, bool) {
+func GetOrCreateSessionForAgent(client, model string) (*MultiAgentSession, *Agent, bool) {
 	sessionsMu.Lock()
 	defer sessionsMu.Unlock()
 
@@ -342,19 +342,19 @@ func getOrCreateSessionForAgent(client, model string) (*MultiAgentSession, *Agen
 	}
 
 	// 3. Create new session.
-	s := newSession()
+	s := NewSession()
 	agent := s.AddAgent(client, model)
 	sessions[s.SessionID] = s
 	return s, agent, true
 }
 
-func getSession(sessionID string) *MultiAgentSession {
+func GetSession(sessionID string) *MultiAgentSession {
 	sessionsMu.RLock()
 	defer sessionsMu.RUnlock()
 	return sessions[sessionID]
 }
 
-func getSessionByAgentID(agentID string) *MultiAgentSession {
+func GetSessionByAgentID(agentID string) *MultiAgentSession {
 	sessionsMu.RLock()
 	defer sessionsMu.RUnlock()
 	for _, s := range sessions {
@@ -365,7 +365,7 @@ func getSessionByAgentID(agentID string) *MultiAgentSession {
 	return nil
 }
 
-func getAllSessions() []*MultiAgentSession {
+func GetAllSessions() []*MultiAgentSession {
 	sessionsMu.RLock()
 	defer sessionsMu.RUnlock()
 	out := make([]*MultiAgentSession, 0, len(sessions))
@@ -375,7 +375,7 @@ func getAllSessions() []*MultiAgentSession {
 	return out
 }
 
-func getActiveSessions() []*MultiAgentSession {
+func GetActiveSessions() []*MultiAgentSession {
 	sessionsMu.RLock()
 	defer sessionsMu.RUnlock()
 	out := make([]*MultiAgentSession, 0)
@@ -388,7 +388,7 @@ func getActiveSessions() []*MultiAgentSession {
 	return out
 }
 
-func deleteSession(sessionID string) bool {
+func DeleteSession(sessionID string) bool {
 	sessionsMu.Lock()
 	defer sessionsMu.Unlock()
 	if _, ok := sessions[sessionID]; ok {
@@ -402,8 +402,32 @@ func deleteSession(sessionID string) bool {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func randomHex(n int) string {
+func RandomHex(n int) string {
 	b := make([]byte, n/2+1)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)[:n]
+}
+
+// ComputeResult determines the session outcome.
+// PASS    = no agents degraded.
+// PARTIAL = some agents degraded but session reached COMPLETE.
+// FAIL    = all agents degraded (or session never started).
+func ComputeResult(s *MultiAgentSession) string {
+	agents := s.GetAgents()
+	if len(agents) == 0 {
+		return "FAIL"
+	}
+	degradedCount := 0
+	for _, a := range agents {
+		if a.GetStatus() == "degraded" {
+			degradedCount++
+		}
+	}
+	if degradedCount == len(agents) {
+		return "FAIL"
+	}
+	if degradedCount > 0 {
+		return "PARTIAL"
+	}
+	return "PASS"
 }

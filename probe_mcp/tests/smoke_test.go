@@ -1,4 +1,4 @@
-package main
+package tests
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluorine/designdoc-mcp/probe/internal/state"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -93,7 +94,7 @@ func TestSmokeGetRuntimeStatus(t *testing.T) {
 		for _, c := range res.Content {
 			if text, ok := c.(*mcp.TextContent); ok {
 				finalPhase = extractFromJSON(text.Text, "phase")
-				if finalPhase != PhaseRegistered {
+				if finalPhase != state.PhaseRegistered {
 					t.Logf("poll %d: phase=%s", i, finalPhase)
 					goto phaseAdvanced
 				}
@@ -104,7 +105,7 @@ func TestSmokeGetRuntimeStatus(t *testing.T) {
 	t.Fatalf("phase did not advance after 10s, still %s", finalPhase)
 
 phaseAdvanced:
-	if finalPhase != PhaseProposal {
+	if finalPhase != state.PhaseProposal {
 		t.Fatalf("expected phase PROPOSAL after registration fill, got: %s", finalPhase)
 	}
 
@@ -152,4 +153,3 @@ func extractFromJSON(jsonStr, key string) string {
 	}
 	return jsonStr[start:end]
 }
-

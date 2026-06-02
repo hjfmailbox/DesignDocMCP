@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluorine/designdoc-mcp/probe/internal/logger"
+	"github.com/fluorine/designdoc-mcp/probe/internal/phase"
+	"github.com/fluorine/designdoc-mcp/probe/internal/state"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -16,30 +19,30 @@ import (
 // ---------------------------------------------------------------------------
 
 func manualAdvanceSession(sessionID string) error {
-	s := getSession(sessionID)
+	s := state.GetSession(sessionID)
 	if s == nil {
 		return fmt.Errorf("session not found")
 	}
 
-	phase := s.GetPhase()
-	switch phase {
-	case PhaseRegistered:
-		enterPhase(s, PhaseProposal)
-	case PhaseProposal:
-		enterPhase(s, PhaseChallenge)
-	case PhaseChallenge:
-		enterPhase(s, PhaseRevision)
-	case PhaseRevision:
-		enterPhase(s, PhaseConsensus)
-	case PhaseConsensus:
-		s.SetPhase(PhaseComplete)
+	phaseStr := s.GetPhase()
+	switch phaseStr {
+	case state.PhaseRegistered:
+		phase.EnterPhase(s, state.PhaseProposal)
+	case state.PhaseProposal:
+		phase.EnterPhase(s, state.PhaseChallenge)
+	case state.PhaseChallenge:
+		phase.EnterPhase(s, state.PhaseRevision)
+	case state.PhaseRevision:
+		phase.EnterPhase(s, state.PhaseConsensus)
+	case state.PhaseConsensus:
+		s.SetPhase(state.PhaseComplete)
 		s.SetComplete()
-		logTimeline(s.SessionID, "session_complete", PhaseComplete, "")
-		writeSessionReport(s, computeResult(s))
-	case PhaseComplete, PhaseFailedTimeout:
-		return fmt.Errorf("session already in terminal state %s", phase)
+		logger.LogTimeline(s.SessionID, "session_complete", state.PhaseComplete, "")
+		logger.WriteSessionReport(s, state.ComputeResult(s))
+	case state.PhaseComplete, state.PhaseFailedTimeout:
+		return fmt.Errorf("session already in terminal state %s", phaseStr)
 	default:
-		return fmt.Errorf("unknown phase %s", phase)
+		return fmt.Errorf("unknown phase %s", phaseStr)
 	}
 	return nil
 }
@@ -48,7 +51,7 @@ func manualAdvanceSession(sessionID string) error {
 // Ping helper
 // ---------------------------------------------------------------------------
 
-func sendPingToAgent(agent *Agent, pingID string) {
+func SendPingToAgent(agent *state.Agent, pingID string) {
 	ss := agent.GetServerSession()
 	if ss == nil {
 		return
@@ -60,7 +63,7 @@ func sendPingToAgent(agent *Agent, pingID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	logNotificationSent("", agent.AgentID, agent.DisplayName, "PING", "", "logging/message", payload)
+	logger.LogNotificationSent("", agent.AgentID, agent.DisplayName, "PING", "", "logging/message", payload)
 
 	err := ss.Log(ctx, &mcp.LoggingMessageParams{
 		Level:  mcp.LoggingLevel("info"),
@@ -103,7 +106,7 @@ type sessionSnapshot struct {
 }
 
 func handleAPISessions(w http.ResponseWriter, _ *http.Request) {
-	sessions := getAllSessions()
+	sessions := state.GetAllSessions()
 	out := make([]sessionSnapshot, 0, len(sessions))
 	for _, s := range sessions {
 		agents := s.GetAgents()
@@ -174,12 +177,12 @@ func handleAPIStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s := getSession(req.SessionID)
+	s := state.GetSession(req.SessionID)
 	if s == nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	if s.GetPhase() != PhaseRegistered {
+	if s.GetPhase() != state.PhaseRegistered {
 		http.Error(w, "session already started", http.StatusBadRequest)
 		return
 	}
@@ -200,7 +203,7 @@ func handleAPIDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if !deleteSession(req.SessionID) {
+	if !state.DeleteSession(req.SessionID) {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
@@ -221,29 +224,29 @@ func handleAPIPing(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s := getSession(req.SessionID)
+	s := state.GetSession(req.SessionID)
 	if s == nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
 
-	pingID := "ping_" + randomHex(6)
+	pingID := "ping_" + state.RandomHex(6)
 	agents := s.GetAgents()
 	pinged := 0
 	for _, agent := range agents {
 		if req.AgentID != "" && agent.AgentID != req.AgentID {
 			continue
 		}
-		logPingSent(s.SessionID, agent.AgentID, pingID)
-		sendPingToAgent(agent, pingID)
+		logger.LogPingSent(s.SessionID, agent.AgentID, pingID)
+		SendPingToAgent(agent, pingID)
 		pinged++
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":   "ok",
-		"ping_id":  pingID,
-		"pinged":   pinged,
+		"status":  "ok",
+		"ping_id": pingID,
+		"pinged":  pinged,
 	})
 }
 
@@ -459,8 +462,8 @@ setInterval(load, 2000);
 </html>
 `
 
-// mux routes /mcp, /api/*, /ui
-func adminMux(mcpHandler http.Handler) http.Handler {
+// AdminMux routes /mcp, /api/*, /ui
+func AdminMux(mcpHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		path := strings.TrimRight(req.URL.Path, "/")
 		switch path {

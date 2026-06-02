@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fluorine/designdoc-mcp/probe/internal/logger"
+	"github.com/fluorine/designdoc-mcp/probe/internal/state"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -65,25 +67,25 @@ type GetRuntimeStatusOutput struct {
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-func handleRegisterAgent(_ context.Context, req *mcp.CallToolRequest, in RegisterAgentInput) (*mcp.CallToolResult, RegisterAgentOutput, error) {
-	session, agent, isNew := getOrCreateSessionForAgent(in.Client, in.Model)
+func HandleRegisterAgent(_ context.Context, req *mcp.CallToolRequest, in RegisterAgentInput) (*mcp.CallToolResult, RegisterAgentOutput, error) {
+	session, agent, isNew := state.GetOrCreateSessionForAgent(in.Client, in.Model)
 	agent.SetServerSession(req.Session)
 
-	connID := randomHex(8)
+	connID := state.RandomHex(8)
 	agent.SetConnected(true, connID)
-	logClientEvent(agent.AgentID, agent.DisplayName, "client_connected", connID)
-	writeConnectedClients(session.GetAgents())
+	logger.LogClientEvent(agent.AgentID, agent.DisplayName, "client_connected", connID)
+	logger.WriteConnectedClients(session.GetAgents())
 
 	if isNew {
-		logTimeline(session.SessionID, "session_created", session.GetPhase(), "")
+		logger.LogTimeline(session.SessionID, "session_created", session.GetPhase(), "")
 	}
 
-	logTimeline(session.SessionID, "agent_joined", session.GetPhase(), "")
-	logEvent(session.SessionID, "agent_joined", map[string]any{
+	logger.LogTimeline(session.SessionID, "agent_joined", session.GetPhase(), "")
+	logger.LogEvent(session.SessionID, "agent_joined", map[string]any{
 		"agent_id":     agent.AgentID,
 		"display_name": agent.DisplayName,
 		"ready_count":  session.AgentCount(),
-		"max_agents":   MaxAgents,
+		"max_agents":   state.MaxAgents,
 	})
 
 	out := RegisterAgentOutput{
@@ -94,57 +96,57 @@ func handleRegisterAgent(_ context.Context, req *mcp.CallToolRequest, in Registe
 	return nil, out, nil
 }
 
-func handleSubmitProposal(_ context.Context, _ *mcp.CallToolRequest, in SubmitProposalInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
-	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseProposal)
+func HandleSubmitProposal(_ context.Context, _ *mcp.CallToolRequest, in SubmitProposalInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, state.PhaseProposal)
 }
 
-func handleSubmitChallenge(_ context.Context, _ *mcp.CallToolRequest, in SubmitChallengeInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
-	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseChallenge)
+func HandleSubmitChallenge(_ context.Context, _ *mcp.CallToolRequest, in SubmitChallengeInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, state.PhaseChallenge)
 }
 
-func handleSubmitRevision(_ context.Context, _ *mcp.CallToolRequest, in SubmitRevisionInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
-	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseRevision)
+func HandleSubmitRevision(_ context.Context, _ *mcp.CallToolRequest, in SubmitRevisionInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, state.PhaseRevision)
 }
 
-func handleSubmitConsensus(_ context.Context, _ *mcp.CallToolRequest, in SubmitConsensusInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
-	return handlePhaseSubmit(in.AgentID, in.TaskID, PhaseConsensus)
+func HandleSubmitConsensus(_ context.Context, _ *mcp.CallToolRequest, in SubmitConsensusInput) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
+	return handlePhaseSubmit(in.AgentID, in.TaskID, state.PhaseConsensus)
 }
 
 func handlePhaseSubmit(agentID, taskID, expectedPhase string) (*mcp.CallToolResult, SubmitPhaseOutput, error) {
-	session := getSessionByAgentID(agentID)
+	session := state.GetSessionByAgentID(agentID)
 	if session == nil {
 		return nil, SubmitPhaseOutput{Status: "unknown_agent"}, nil
 	}
 
 	task := session.GetTask(taskID)
 	if task == nil {
-		logResponse(session.SessionID, expectedPhase, taskID, agentID, "unknown_task")
+		logger.LogResponse(session.SessionID, expectedPhase, taskID, agentID, "unknown_task")
 		return nil, SubmitPhaseOutput{Status: "unknown_task_id"}, nil
 	}
 
 	// Idempotency check.
 	if task.Responded {
-		logResponse(session.SessionID, expectedPhase, taskID, agentID, "duplicate")
+		logger.LogResponse(session.SessionID, expectedPhase, taskID, agentID, "duplicate")
 		return nil, SubmitPhaseOutput{Status: "already_done"}, nil
 	}
 
 	// Phase + agent validation.
 	if task.Phase != expectedPhase {
-		logResponse(session.SessionID, expectedPhase, taskID, agentID, "wrong_phase")
+		logger.LogResponse(session.SessionID, expectedPhase, taskID, agentID, "wrong_phase")
 		return nil, SubmitPhaseOutput{Status: fmt.Sprintf("wrong_phase: expected %s, got %s", expectedPhase, task.Phase)}, nil
 	}
 	if task.AgentID != agentID {
-		logResponse(session.SessionID, expectedPhase, taskID, agentID, "wrong_agent")
+		logger.LogResponse(session.SessionID, expectedPhase, taskID, agentID, "wrong_agent")
 		return nil, SubmitPhaseOutput{Status: "wrong_agent_id"}, nil
 	}
 
 	task.MarkResponded()
-	logResponse(session.SessionID, expectedPhase, taskID, agentID, "success")
+	logger.LogResponse(session.SessionID, expectedPhase, taskID, agentID, "success")
 	return nil, SubmitPhaseOutput{Status: "success"}, nil
 }
 
-func handleGetRuntimeStatus(_ context.Context, _ *mcp.CallToolRequest, in GetRuntimeStatusInput) (*mcp.CallToolResult, GetRuntimeStatusOutput, error) {
-	session := getSessionByAgentID(in.AgentID)
+func HandleGetRuntimeStatus(_ context.Context, _ *mcp.CallToolRequest, in GetRuntimeStatusInput) (*mcp.CallToolResult, GetRuntimeStatusOutput, error) {
+	session := state.GetSessionByAgentID(in.AgentID)
 	if session == nil {
 		out := GetRuntimeStatusOutput{Registered: false}
 		return nil, out, nil
@@ -180,21 +182,21 @@ func handleGetRuntimeStatus(_ context.Context, _ *mcp.CallToolRequest, in GetRun
 	return nil, out, nil
 }
 
-func handleGenerateReport(_ context.Context, _ *mcp.CallToolRequest, in GenerateReportInput) (*mcp.CallToolResult, GenerateReportOutput, error) {
-	var list []*MultiAgentSession
+func HandleGenerateReport(_ context.Context, _ *mcp.CallToolRequest, in GenerateReportInput) (*mcp.CallToolResult, GenerateReportOutput, error) {
+	var list []*state.MultiAgentSession
 	if in.SessionID != "" {
-		if s := getSession(in.SessionID); s != nil {
+		if s := state.GetSession(in.SessionID); s != nil {
 			list = append(list, s)
 		}
 	} else {
-		list = getAllSessions()
+		list = state.GetAllSessions()
 	}
 
 	var rows []string
 	for _, s := range list {
 		pc := s.CompletedPhases
-		result := computeResult(s)
-		if s.GetPhase() == PhaseFailedTimeout {
+		result := state.ComputeResult(s)
+		if s.GetPhase() == state.PhaseFailedTimeout {
 			result = "FAIL"
 		}
 
@@ -207,10 +209,10 @@ func handleGenerateReport(_ context.Context, _ *mcp.CallToolRequest, in Generate
 		row := fmt.Sprintf("| %s | %s | %s | %s | %s | %s | %s | %s |",
 			s.SessionID,
 			strings.Join(agentNames, ", "),
-			boolStr(pc[PhaseProposal]),
-			boolStr(pc[PhaseChallenge]),
-			boolStr(pc[PhaseRevision]),
-			boolStr(pc[PhaseConsensus]),
+			boolStr(pc[state.PhaseProposal]),
+			boolStr(pc[state.PhaseChallenge]),
+			boolStr(pc[state.PhaseRevision]),
+			boolStr(pc[state.PhaseConsensus]),
 			s.GetPhase(),
 			result,
 		)

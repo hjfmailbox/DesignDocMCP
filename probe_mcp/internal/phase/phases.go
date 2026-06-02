@@ -1,4 +1,4 @@
-package main
+package phase
 
 import (
 	"context"
@@ -6,21 +6,23 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fluorine/designdoc-mcp/probe/internal/logger"
+	"github.com/fluorine/designdoc-mcp/probe/internal/state"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const phasePushTimeout = 30 * time.Second
 
 var actionMap = map[string]string{
-	PhaseProposal:  "submit_proposal",
-	PhaseChallenge: "submit_challenge",
-	PhaseRevision:  "submit_revision",
-	PhaseConsensus: "submit_consensus",
+	state.PhaseProposal:  "submit_proposal",
+	state.PhaseChallenge: "submit_challenge",
+	state.PhaseRevision:  "submit_revision",
+	state.PhaseConsensus: "submit_consensus",
 }
 
-// enterPhase creates tasks for every active agent in the session.
+// EnterPhase creates tasks for every active agent in the session.
 // For challenge phase, tasks include a fixed topology target.
-func enterPhase(session *MultiAgentSession, phase string) {
+func EnterPhase(session *state.MultiAgentSession, phase string) {
 	session.ClearTasks()
 	session.SetPhase(phase)
 
@@ -30,27 +32,27 @@ func enterPhase(session *MultiAgentSession, phase string) {
 			continue
 		}
 
-		taskID := "task_" + randomHex(6)
-		task := &PhaseTask{
+		taskID := "task_" + state.RandomHex(6)
+		task := &state.PhaseTask{
 			TaskID:  taskID,
 			Phase:   phase,
 			AgentID: agent.AgentID,
 		}
 
-		if phase == PhaseChallenge {
+		if phase == state.PhaseChallenge {
 			task.TargetID = session.GetChallengeTarget(agent.AgentID)
 		}
 
 		session.AddTask(task)
-		logTimeline(session.SessionID, "task_created", phase, taskID)
+		logger.LogTimeline(session.SessionID, "task_created", phase, taskID)
 	}
 
-	logTimeline(session.SessionID, "phase_started", phase, "")
+	logger.LogTimeline(session.SessionID, "phase_started", phase, "")
 }
 
-// pushTask sends an MCP logging push to the agent's ServerSession.
+// PushTask sends an MCP logging push to the agent's ServerSession.
 // Returns true if the push was attempted (regardless of transport error).
-func pushTask(task *PhaseTask, agent *Agent) bool {
+func PushTask(task *state.PhaseTask, agent *state.Agent) bool {
 	ss := agent.GetServerSession()
 	if ss == nil {
 		return false
@@ -73,7 +75,7 @@ func pushTask(task *PhaseTask, agent *Agent) bool {
 
 	sessionID := sessionByTask(task)
 
-	logNotificationSent(sessionID, agent.AgentID, agent.DisplayName, task.Phase, task.TaskID, "logging/message", payload)
+	logger.LogNotificationSent(sessionID, agent.AgentID, agent.DisplayName, task.Phase, task.TaskID, "logging/message", payload)
 
 	err := ss.Log(ctx, &mcp.LoggingMessageParams{
 		Level:  mcp.LoggingLevel("info"),
@@ -82,10 +84,10 @@ func pushTask(task *PhaseTask, agent *Agent) bool {
 	})
 
 	task.IncrementPush()
-	logPush(sessionID, task.Phase, task.TaskID, task.PushCount)
+	logger.LogPush(sessionID, task.Phase, task.TaskID, task.PushCount)
 
 	if err != nil {
-		logTimeline(sessionID, "push_failed", task.Phase, task.TaskID)
+		logger.LogTimeline(sessionID, "push_failed", task.Phase, task.TaskID)
 		fmt.Printf("push failed for agent %s task %s: %v\n", agent.AgentID, task.TaskID, err)
 	}
 
@@ -93,8 +95,8 @@ func pushTask(task *PhaseTask, agent *Agent) bool {
 }
 
 // sessionByTask finds the session owning a task. Used for logging only.
-func sessionByTask(task *PhaseTask) string {
-	for _, s := range getAllSessions() {
+func sessionByTask(task *state.PhaseTask) string {
+	for _, s := range state.GetAllSessions() {
 		if s.GetTask(task.TaskID) != nil {
 			return s.SessionID
 		}

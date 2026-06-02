@@ -14,7 +14,7 @@ set -e
 
 OUTPUT_DIR="${PROBE_OUTPUTS_DIR:-E:/DesignDocMCPTest1/probe_outputs}"
 LOGS_DIR="${PROBE_LOGS_DIR:-logs}"
-BINARY="./mini-debate-runtime.exe"
+BINARY="../../probe_mcp/mini-debate-runtime.exe"
 
 # ---------------------------------------------------------------------------
 # Helpers

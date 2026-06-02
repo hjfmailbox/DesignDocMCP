@@ -11,13 +11,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fluorine/designdoc-mcp/probe/internal/api"
+	"github.com/fluorine/designdoc-mcp/probe/internal/logger"
+	"github.com/fluorine/designdoc-mcp/probe/internal/scheduler"
+	"github.com/fluorine/designdoc-mcp/probe/internal/server"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
-	ensureDirs()
+	logger.EnsureDirs()
 
-	server := mcp.NewServer(
+	mcpServer := mcp.NewServer(
 		&mcp.Implementation{
 			Name:    "MiniDebateRuntime",
 			Version: "0.2.0",
@@ -27,43 +31,43 @@ func main() {
 		},
 	)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "register_agent",
 		Description: "Register an agent for the mini-debate runtime.\n\nReturns session details. A server-push phase loop begins immediately after registration.",
-	}, handleRegisterAgent)
+	}, server.HandleRegisterAgent)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "submit_proposal",
 		Description: "Submit a proposal response for the current PROPOSAL phase. Idempotent per task_id.",
-	}, handleSubmitProposal)
+	}, server.HandleSubmitProposal)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "submit_challenge",
 		Description: "Submit a challenge response for the current CHALLENGE phase. Idempotent per task_id.",
-	}, handleSubmitChallenge)
+	}, server.HandleSubmitChallenge)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "submit_revision",
 		Description: "Submit a revision response for the current REVISION phase. Idempotent per task_id.",
-	}, handleSubmitRevision)
+	}, server.HandleSubmitRevision)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "submit_consensus",
 		Description: "Submit a consensus vote for the current CONSENSUS phase. Idempotent per task_id.",
-	}, handleSubmitConsensus)
+	}, server.HandleSubmitConsensus)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "get_runtime_status",
 		Description: "Query current session status for the given agent. Returns phase, task_id, and whether a submit is needed.",
-	}, handleGetRuntimeStatus)
+	}, server.HandleGetRuntimeStatus)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "generate_report",
 		Description: "Generate a Markdown debate runtime report by scanning sessions and logs.",
-	}, handleGenerateReport)
+	}, server.HandleGenerateReport)
 
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
-		return server
+		return mcpServer
 	}, nil)
 
 	// Workaround: Go SDK v1.6.1 requires Accept to contain both
@@ -88,18 +92,18 @@ func main() {
 		mcpHandler.ServeHTTP(w, req)
 	})
 
-	handler := adminMux(mcpWithAccept)
+	handler := api.AdminMux(mcpWithAccept)
 
 	addr := "127.0.0.1:8799"
-	logTimeline("", "startup", "", "")
+	logger.LogTimeline("", "startup", "", "")
 
-	StartScheduler()
+	scheduler.StartScheduler()
 	fmt.Println("MiniDebateRuntime started")
 	fmt.Println("Scheduler started")
 	fmt.Println("MCP Endpoint: http://127.0.0.1:8799/mcp")
 	fmt.Println("Admin UI:     http://127.0.0.1:8799/ui")
-	fmt.Printf("Outputs dir:  %s\n", probeOutputsDir)
-	fmt.Printf("Logs dir:     %s\n", logsDir)
+	fmt.Printf("Outputs dir:  %s\n", logger.ProbeOutputsDir)
+	fmt.Printf("Logs dir:     %s\n", logger.LogsDir)
 
 	srv := &http.Server{Addr: addr, Handler: handler}
 

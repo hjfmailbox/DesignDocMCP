@@ -115,7 +115,7 @@ def start_gateway() -> int | None:
 
     # Locate the compiled binary relative to script location
     script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parent
+    repo_root = script_dir.parent.parent
     gw_binary = repo_root / "mcp-gateway.exe"
     if not gw_binary.exists():
         # Fallback: search in GOPATH or PATH
@@ -232,4 +232,4 @@ if __name__ == "__main__":
         status()
     else:
         print(f"Unknown command: {cmd}")
-        print("Usage: python scripts/mcp_server_ctl.py [start|stop|restart|status]")
+        print("Usage: python scripts/python/mcp_server_ctl.py [start|stop|restart|status]")
