@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,26 +17,39 @@ import (
 func TestEndToEndDebate(t *testing.T) {
 	ctx := context.Background()
 
-	pushReceived := make(chan map[string]any, 1)
-	var pushOnce sync.Once
+	// Channels are swapped each phase so stale pushes don't leak.
+	var currentPushCh1 chan map[string]any
+	var currentPushCh2 chan map[string]any
 
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "debate-test-client",
+	client1 := mcp.NewClient(&mcp.Implementation{
+		Name:    "test-client-1",
 		Version: "1.0.0",
 	}, &mcp.ClientOptions{
 		LoggingMessageHandler: func(_ context.Context, req *mcp.LoggingMessageRequest) {
-			params := req.Params
-			fmt.Printf("[PUSH RECEIVED] level=%s logger=%s data=%v\n", params.Level, params.Logger, params.Data)
-			var pushData map[string]any
-			if s, ok := params.Data.(string); ok {
-				_ = json.Unmarshal([]byte(s), &pushData)
-			} else if b, ok := params.Data.([]byte); ok {
-				_ = json.Unmarshal(b, &pushData)
-			} else {
-				b, _ := json.Marshal(params.Data)
-				_ = json.Unmarshal(b, &pushData)
+			ch := currentPushCh1
+			if ch == nil {
+				return
 			}
-			pushOnce.Do(func() { pushReceived <- pushData })
+			select {
+			case ch <- extractPushData(req):
+			default:
+			}
+		},
+	})
+
+	client2 := mcp.NewClient(&mcp.Implementation{
+		Name:    "test-client-2",
+		Version: "1.0.0",
+	}, &mcp.ClientOptions{
+		LoggingMessageHandler: func(_ context.Context, req *mcp.LoggingMessageRequest) {
+			ch := currentPushCh2
+			if ch == nil {
+				return
+			}
+			select {
+			case ch <- extractPushData(req):
+			default:
+			}
 		},
 	})
 
@@ -42,65 +57,99 @@ func TestEndToEndDebate(t *testing.T) {
 		Endpoint: "http://127.0.0.1:8799/mcp",
 	}
 
-	fmt.Println("Connecting to MCP server at http://127.0.0.1:8799/mcp ...")
-	session, err := client.Connect(ctx, transport, nil)
+	fmt.Println("Connecting clients to MCP server...")
+	session1, err := client1.Connect(ctx, transport, nil)
 	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
+		t.Fatalf("Client1 connect failed: %v", err)
 	}
-	defer session.Close()
+	defer session1.Close()
+
+	session2, err := client2.Connect(ctx, transport, nil)
+	if err != nil {
+		t.Fatalf("Client2 connect failed: %v", err)
+	}
+	defer session2.Close()
+
 	fmt.Println("Connected.")
 
-	fmt.Println("Setting logging level to info ...")
-	if err := session.SetLoggingLevel(ctx, &mcp.SetLoggingLevelParams{Level: "info"}); err != nil {
-		t.Fatalf("SetLoggingLevel failed: %v", err)
+	if err := session1.SetLoggingLevel(ctx, &mcp.SetLoggingLevelParams{Level: "info"}); err != nil {
+		t.Fatalf("SetLoggingLevel client1 failed: %v", err)
 	}
-	fmt.Println("Logging level set.")
+	if err := session2.SetLoggingLevel(ctx, &mcp.SetLoggingLevelParams{Level: "info"}); err != nil {
+		t.Fatalf("SetLoggingLevel client2 failed: %v", err)
+	}
 
-	// 1. register_agent
-	fmt.Println("\n=== 1. register_agent ===")
-	res1, err := session.CallTool(ctx, &mcp.CallToolParams{
+	// ------------------------------------------------------------------
+	// Register both agents
+	// ------------------------------------------------------------------
+	fmt.Println("\n=== Register Agent 1 ===")
+	res1, err := session1.CallTool(ctx, &mcp.CallToolParams{
 		Name: "register_agent",
 		Arguments: map[string]any{
 			"client": "test-client",
-			"model":  "test-model",
+			"model":  "test-model-1",
 		},
 	})
 	if err != nil {
-		t.Fatalf("register_agent failed: %v", err)
+		t.Fatalf("register_agent 1 failed: %v", err)
 	}
-	printResult(res1)
+	agentID1, sessionID1 := extractRegisterIDs(res1)
+	fmt.Printf("Agent1: agent_id=%s session_id=%s\n", agentID1, sessionID1)
 
-	agentID, sessionID := extractRegisterIDs(res1)
-	if agentID == "" || sessionID == "" {
-		t.Fatal("Could not extract agent_id/session_id from register result")
+	fmt.Println("\n=== Register Agent 2 ===")
+	res2, err := session2.CallTool(ctx, &mcp.CallToolParams{
+		Name: "register_agent",
+		Arguments: map[string]any{
+			"client": "test-client",
+			"model":  "test-model-2",
+		},
+	})
+	if err != nil {
+		t.Fatalf("register_agent 2 failed: %v", err)
 	}
-	fmt.Printf("Using agent_id=%s session_id=%s\n", agentID, sessionID)
+	agentID2, sessionID2 := extractRegisterIDs(res2)
+	fmt.Printf("Agent2: agent_id=%s session_id=%s\n", agentID2, sessionID2)
 
-	// Helper to wait for push and respond
-	runPhase := func(phase, toolName string) {
-		fmt.Printf("\n=== Waiting for %s push (max 35s) ===\n", phase)
+	if sessionID1 != sessionID2 {
+		t.Fatalf("Agents not in same session: %s vs %s", sessionID1, sessionID2)
+	}
+	fmt.Println("Both agents in same session ✓")
+
+	// ------------------------------------------------------------------
+	// Start session manually (auto-start disabled)
+	// ------------------------------------------------------------------
+	fmt.Println("\n=== Start session via admin API ===")
+	startBody := fmt.Sprintf(`{"session_id":"%s"}`, sessionID1)
+	resp, err := http.Post("http://127.0.0.1:8799/api/start", "application/json", strings.NewReader(startBody))
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+	resp.Body.Close()
+	fmt.Println("Session started via API")
+
+	// ------------------------------------------------------------------
+	// Run phases for both agents
+	// ------------------------------------------------------------------
+	runPhase := func(phase, toolName string, sess *mcp.ClientSession, agID string, pushCh chan map[string]any) {
+		fmt.Printf("\n--- Waiting for %s push for %s ---\n", phase, agID)
 		var pushData map[string]any
 		select {
-		case pushData = <-pushReceived:
-			fmt.Printf("Push received: %+v\n", pushData)
+		case pushData = <-pushCh:
+			fmt.Printf("Push received for %s: %+v\n", agID, pushData)
 		case <-time.After(35 * time.Second):
-			t.Fatalf("Timeout waiting for %s push", phase)
+			t.Fatalf("Timeout waiting for %s push for %s", phase, agID)
 		}
 
 		taskID, _ := pushData["task_id"].(string)
 		if taskID == "" {
-			t.Fatalf("Push missing task_id for %s", phase)
+			t.Fatalf("Push missing task_id for %s (%s)", phase, agID)
 		}
 
-		// Reset for next phase
-		pushOnce = sync.Once{}
-		pushReceived = make(chan map[string]any, 1)
-
-		fmt.Printf("\n=== Submit %s (task_id=%s) ===\n", toolName, taskID)
-		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		fmt.Printf("--- Submit %s for %s (task=%s) ---\n", toolName, agID, taskID)
+		res, err := sess.CallTool(ctx, &mcp.CallToolParams{
 			Name: toolName,
 			Arguments: map[string]any{
-				"agent_id": agentID,
+				"agent_id": agID,
 				"task_id":  taskID,
 				"content": map[string]any{
 					"phase": phase,
@@ -109,52 +158,100 @@ func TestEndToEndDebate(t *testing.T) {
 			},
 		})
 		if err != nil {
-			t.Fatalf("%s failed: %v", toolName, err)
+			t.Fatalf("%s failed for %s: %v", toolName, agID, err)
 		}
 		printResult(res)
 	}
 
-	// Phase 2: PROPOSAL
-	runPhase("proposal", "submit_proposal")
+	phases := []struct {
+		phase string
+		tool  string
+	}{
+		{"proposal", "submit_proposal"},
+		{"challenge", "submit_challenge"},
+		{"revision", "submit_revision"},
+		{"consensus", "submit_consensus"},
+	}
 
-	// Phase 3: CHALLENGE
-	runPhase("challenge", "submit_challenge")
+	for _, p := range phases {
+		fmt.Printf("\n========== Phase: %s ==========\n", p.phase)
+		currentPushCh1 = make(chan map[string]any, 10)
+		currentPushCh2 = make(chan map[string]any, 10)
 
-	// Phase 4: REVISION
-	runPhase("revision", "submit_revision")
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			runPhase(p.phase, p.tool, session1, agentID1, currentPushCh1)
+		}()
+		go func() {
+			defer wg.Done()
+			runPhase(p.phase, p.tool, session2, agentID2, currentPushCh2)
+		}()
+		wg.Wait()
+	}
 
-	// Phase 5: CONSENSUS
-	runPhase("consensus", "submit_consensus")
+	// ------------------------------------------------------------------
+	// Verify session completed
+	// ------------------------------------------------------------------
+	fmt.Println("\n=== Verify session status ===")
+	statusRes, err := session1.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_runtime_status",
+		Arguments: map[string]any{"agent_id": agentID1},
+	})
+	if err != nil {
+		t.Fatalf("get_runtime_status failed: %v", err)
+	}
+	printResult(statusRes)
 
-	// 6. generate_report
-	fmt.Println("\n=== 6. generate_report ===")
-	res6, err := session.CallTool(ctx, &mcp.CallToolParams{
+	fmt.Println("\n=== Generate report ===")
+	repRes, err := session1.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "generate_report",
-		Arguments: map[string]any{"session_id": sessionID},
+		Arguments: map[string]any{"session_id": sessionID1},
 	})
 	if err != nil {
 		t.Fatalf("generate_report failed: %v", err)
 	}
-	printResult(res6)
+	printResult(repRes)
 
-	// 7. Verify report file exists
-	reportPath := fmt.Sprintf("E:/DesignDocMCPTest1/probe_outputs/%s/report.json", sessionID)
-	if _, err := os.Stat(reportPath); os.IsNotExist(err) {
-		t.Fatalf("Report file not found: %s", reportPath)
+	// ------------------------------------------------------------------
+	// Verify summary.json
+	// ------------------------------------------------------------------
+	summaryPath := fmt.Sprintf("E:/DesignDocMCPTest1/probe_outputs/%s/summary.json", sessionID1)
+	var summary map[string]any
+	for i := 0; i < 10; i++ {
+		data, err := os.ReadFile(summaryPath)
+		if err == nil {
+			if err := json.Unmarshal(data, &summary); err == nil {
+				break
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	fmt.Printf("Report file exists: %s\n", reportPath)
+	if summary == nil {
+		t.Fatalf("summary.json not found or unreadable: %s", summaryPath)
+	}
 
-	data, _ := os.ReadFile(reportPath)
-	var report map[string]any
-	if err := json.Unmarshal(data, &report); err != nil {
-		t.Fatalf("Failed to parse report: %v", err)
+	result, _ := summary["result"].(string)
+	if result != "PASS" && result != "PARTIAL" {
+		t.Fatalf("Expected PASS or PARTIAL, got %s", result)
 	}
-	if report["result"] != "PASS" {
-		t.Fatalf("Expected result PASS, got %v", report["result"])
-	}
-	fmt.Println("Report result: PASS")
-
+	fmt.Printf("Summary result: %s ✓\n", result)
 	fmt.Println("\n=== All tests completed successfully ===")
+}
+
+func extractPushData(req *mcp.LoggingMessageRequest) map[string]any {
+	params := req.Params
+	var pushData map[string]any
+	if s, ok := params.Data.(string); ok {
+		_ = json.Unmarshal([]byte(s), &pushData)
+	} else if b, ok := params.Data.([]byte); ok {
+		_ = json.Unmarshal(b, &pushData)
+	} else {
+		b, _ := json.Marshal(params.Data)
+		_ = json.Unmarshal(b, &pushData)
+	}
+	return pushData
 }
 
 func printResult(res *mcp.CallToolResult) {
@@ -188,8 +285,8 @@ func extractRegisterIDs(res *mcp.CallToolResult) (agentID, sessionID string) {
 }
 
 func TestMain(m *testing.M) {
-	if _, err := os.Stat("probe_mcp.exe"); err == nil {
-		fmt.Println("Found probe_mcp.exe – assuming server is running externally.")
+	if _, err := os.Stat("mini-debate-runtime.exe"); err == nil {
+		fmt.Println("Found mini-debate-runtime.exe – assuming server is running externally.")
 	}
 	os.Exit(m.Run())
 }

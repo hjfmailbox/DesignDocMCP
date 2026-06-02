@@ -70,7 +70,7 @@ func main() {
 	// application/json and text/event-stream. Some clients (Cursor, Trae)
 	// only send application/json. Inject the missing accept type so the
 	// SDK handler doesn't reject them with 400.
-	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	mcpWithAccept := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		accepts := req.Header.Values("Accept")
 		hasJSON := false
 		hasStream := false
@@ -88,13 +88,18 @@ func main() {
 		mcpHandler.ServeHTTP(w, req)
 	})
 
+	handler := adminMux(mcpWithAccept)
+
 	addr := "127.0.0.1:8799"
 	logTimeline("", "startup", "", "")
 
+	StartScheduler()
 	fmt.Println("MiniDebateRuntime started")
-	fmt.Println("URL: http://127.0.0.1:8799/mcp")
-	fmt.Printf("Outputs dir: %s\n", probeOutputsDir)
-	fmt.Printf("Logs dir: %s\n", logsDir)
+	fmt.Println("Scheduler started")
+	fmt.Println("MCP Endpoint: http://127.0.0.1:8799/mcp")
+	fmt.Println("Admin UI:     http://127.0.0.1:8799/ui")
+	fmt.Printf("Outputs dir:  %s\n", probeOutputsDir)
+	fmt.Printf("Logs dir:     %s\n", logsDir)
 
 	srv := &http.Server{Addr: addr, Handler: handler}
 

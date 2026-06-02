@@ -64,8 +64,9 @@ Your ONLY job is:
 2. Call `register_agent`
 3. Call `logging/setLevel`
 4. Call `get_runtime_status`
-5. Enter the polling loop until the session is COMPLETE or FAILED_TIMEOUT
-6. That is ALL
+5. Handle initial submit if needed
+6. Enter push-based event loop until session ends
+7. That is ALL
 
 If the user invoked `/dd-enter-auto-mode`, your FIRST action is to detect client environment, then call `register_agent`.
 
@@ -199,21 +200,19 @@ This is IDEMPOTENT. If an active session already exists for this exact client+mo
 
 ---
 
-# STEP 2 — Set logging level (CRITICAL)
+# STEP 2 — Set logging level (OPTIONAL)
 
-Call `logging/setLevel` immediately after register_agent returns.
+If the client supports `logging/setLevel`, call it immediately after register_agent returns.
 
 ```python
 logging/setLevel(level="info")
 ```
 
-**Without this step, server push notifications are silently dropped by the MCP SDK.** The server will think pushes succeeded, but the client receives nothing.
-
-This is a known issue with Go SDK v1.6.1. Do NOT skip this step.
+Some MCP clients (e.g. Claude Code) do not expose this tool. If the tool is not available, proceed to Step 3. Push notifications may still work via the client's LoggingMessageHandler.
 
 ---
 
-# STEP 3 — Query runtime status
+# STEP 3 — Query initial status
 
 Call `get_runtime_status` with the `agent_id` returned from Step 1.
 
@@ -227,7 +226,7 @@ Read the result.
 
 ---
 
-# STEP 4 — Branch on status
+# STEP 4 — Handle initial state
 
 ## Case A: Session already complete or failed
 
@@ -254,72 +253,70 @@ Call the appropriate submit tool based on `phase`:
 
 Content may be empty object `{}` or minimal payload.
 
-After submit returns, proceed to polling loop.
-
-## Case C: Waiting for phase
+## Case C: Waiting (REGISTERED or no task yet)
 
 If `phase` == `REGISTERED` or `needs_submit` == `false`:
 
-Proceed directly to polling loop.
+Proceed to push loop.
 
 ---
 
-# STEP 5 — Polling loop
+# STEP 5 — Push-based event loop
 
-**Push notifications are UNRELIABLE.** Some clients (Kimi, Cursor) do not receive MCP logging notifications even with correct level set. Therefore polling is the PRIMARY mechanism. Push is secondary.
+This skill is **pure push-based**. The agent waits for server push notifications via the `LoggingMessageHandler` callback. No polling. No periodic `get_runtime_status` calls.
 
-Use this deterministic timeout sequence, cycling forever:
+## Push handler setup
 
-```
-25 → 30 → 20 → 35 → 15 → 40
-```
+Configure your `LoggingMessageHandler` to parse each push and trigger the appropriate submit.
 
-Round 1: wait 25s
-Round 2: wait 30s
-Round 3: wait 20s
-Round 4: wait 35s
-Round 5: wait 15s
-Round 6: wait 40s
-Round 7: wait 25s (cycle repeats)
-...
+```python
+on_push_received(data):
+    payload = json_parse(data)
+    phase        = payload["phase"]
+    task_id      = payload["task_id"]
+    action       = payload["required_action"]   # e.g. "submit_proposal"
 
-**Loop body:**
+    # Map required_action to submit tool
+    tool_map = {
+        "submit_proposal":  submit_proposal,
+        "submit_challenge": submit_challenge,
+        "submit_revision":  submit_revision,
+        "submit_consensus": submit_consensus,
+    }
+    submit_tool = tool_map[action]
 
-1. Call `get_runtime_status(agent_id=...)`
-2. If `phase` == `COMPLETE` or `phase` == `FAILED_TIMEOUT`:
-   Output fixed text and STOP.
-3. If `needs_submit` == `true`:
-   Call the appropriate submit tool immediately.
-   After submit returns, do NOT wait. Immediately call `get_runtime_status` again.
-4. If `needs_submit` == `false`:
-   Wait according to the current timeout ladder value.
-   Then repeat from step 1.
+    # Call the submit tool
+    submit_tool(
+        agent_id="<agent_id>",
+        task_id=task_id,
+        content={},
+    )
 
-**What this means in practice:**
-
-```
-while True:
-    status = get_runtime_status(agent_id)
-    if status.phase in [COMPLETE, FAILED_TIMEOUT]:
-        output result; STOP
-    if status.needs_submit:
-        submit_phase(status.phase, status.task_id)
-        continue  # immediate next poll, no wait
-    wait(ladder[round % 6])
-    round += 1
+    # After submit, check if session has ended
+    status = get_runtime_status(agent_id="<agent_id>")
+    if status.phase in ["COMPLETE", "FAILED_TIMEOUT"]:
+        output_final_result(status)
+        STOP
 ```
 
----
+## Main thread behavior
 
-# LOOP RULES
+The main thread does NOTHING after Step 4 except wait. All subsequent actions are triggered by push notifications.
 
-* **DO NOT stop on timeout.** Timeout from `get_runtime_status` means "no action needed yet", not "give up".
-* **DO NOT analyze WHY there is no task.** E.g. "session is brand new", "probably test" — FORBIDDEN.
-* **DO NOT output poll_round to user.** Keep it internal.
-* **DO NOT rely on push notifications alone.** Polling is primary.
-* **The ONLY correct response to "no task needed" is: wait and poll again.**
-* If you have polled 100 times with no task, you poll 101 times.
-* There is no ceiling. There is no exception. The server manages phase transitions; your job is to poll and submit when needed.
+```python
+# After Step 4, main thread simply waits.
+# Each push triggers: submit -> get_runtime_status -> check if done.
+# If no push arrives, the agent waits indefinitely.
+wait_forever()
+```
+
+## Push reliability note
+
+If your MCP client (Kimi, Cursor) does not reliably deliver logging pushes, this skill will appear to hang. That is a client/SDK limitation, not a server issue.
+
+In that case, the user must either:
+- Use a client that supports MCP logging notifications (Claude Code, Trae), OR
+- Invoke a polling-based skill instead.
 
 ---
 
@@ -370,7 +367,7 @@ If the user interrupts you, that is the only valid exit.
 > Skipping `logging/setLevel` because "push should work anyway."
 
 ❌ Wrong:
-> Stopping after 3 timeouts and saying "no tasks available."
+> Polling `get_runtime_status` on a timer.
 
 ❌ Wrong:
 > Implementing a custom HTTP client instead of calling MCP tools.
@@ -380,4 +377,4 @@ If the user interrupts you, that is the only valid exit.
 > call logging/setLevel(info)
 > call get_runtime_status(agent_id)
 > if needs_submit: call submit_proposal(...)
-> loop: wait → get_runtime_status → submit if needed
+> wait for push -> submit -> check done

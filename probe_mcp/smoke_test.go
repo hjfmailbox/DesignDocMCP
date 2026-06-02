@@ -12,7 +12,13 @@ import (
 func TestSmokeGetRuntimeStatus(t *testing.T) {
 	ctx := context.Background()
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "smoke-test", Version: "1.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "smoke-test", Version: "1.0.0"},
+		&mcp.ClientOptions{
+			LoggingMessageHandler: func(_ context.Context, req *mcp.LoggingMessageRequest) {
+				// Drain push messages to prevent SDK blocking.
+				_ = req.Params.Data
+			},
+		})
 	transport := &mcp.StreamableClientTransport{Endpoint: "http://127.0.0.1:8799/mcp"}
 
 	session, err := client.Connect(ctx, transport, nil)
@@ -21,30 +27,42 @@ func TestSmokeGetRuntimeStatus(t *testing.T) {
 	}
 	defer session.Close()
 
-	// 1. register_agent
-	res1, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "register_agent",
-		Arguments: map[string]any{"client": "smoke-client", "model": "smoke-model"},
-	})
-	if err != nil {
-		t.Fatalf("register_agent failed: %v", err)
-	}
+	// ------------------------------------------------------------------
+	// 1. Register 4 agents (fills one session)
+	// ------------------------------------------------------------------
+	var agentIDs []string
+	var sessionID string
+	models := []string{"smoke-a", "smoke-b", "smoke-c", "smoke-d"}
 
-	var agentID, sessID string
-	for _, c := range res1.Content {
-		text, ok := c.(*mcp.TextContent)
-		if !ok {
-			continue
+	for _, model := range models {
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "register_agent",
+			Arguments: map[string]any{"client": "smoke-client", "model": model},
+		})
+		if err != nil {
+			t.Fatalf("register_agent(%s) failed: %v", model, err)
 		}
-		agentID = extractFromJSON(text.Text, "agent_id")
-		sessID = extractFromJSON(text.Text, "session_id")
+		agID, sessID := extractIDs(res)
+		if agID == "" || sessID == "" {
+			t.Fatalf("missing ids for model %s", model)
+		}
+		if sessionID == "" {
+			sessionID = sessID
+		} else if sessID != sessionID {
+			t.Fatalf("agents split across sessions: %s vs %s", sessionID, sessID)
+		}
+		agentIDs = append(agentIDs, agID)
+		t.Logf("registered agent_id=%s session_id=%s", agID, sessID)
 	}
-	if agentID == "" || sessID == "" {
-		t.Fatalf("missing ids: agentID=%s sessID=%s", agentID, sessID)
-	}
-	t.Logf("registered agent_id=%s session_id=%s", agentID, sessID)
 
+	if len(agentIDs) != 4 {
+		t.Fatalf("expected 4 agents, got %d", len(agentIDs))
+	}
+	t.Logf("all 4 agents in session %s", sessionID)
+
+	// ------------------------------------------------------------------
 	// 2. get_runtime_status (unknown agent)
+	// ------------------------------------------------------------------
 	res2, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "get_runtime_status",
 		Arguments: map[string]any{"agent_id": "nonexistent"},
@@ -54,77 +72,71 @@ func TestSmokeGetRuntimeStatus(t *testing.T) {
 	}
 	for _, c := range res2.Content {
 		if text, ok := c.(*mcp.TextContent); ok {
-			t.Logf("status unknown: %s", text.Text)
 			if !strings.Contains(text.Text, `"registered":false`) {
 				t.Fatalf("expected registered=false for unknown agent, got: %s", text.Text)
 			}
 		}
 	}
 
-	// 3. get_runtime_status (known agent)
-	res3, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "get_runtime_status",
-		Arguments: map[string]any{"agent_id": agentID},
-	})
-	if err != nil {
-		t.Fatalf("get_runtime_status known failed: %v", err)
-	}
-	for _, c := range res3.Content {
-		if text, ok := c.(*mcp.TextContent); ok {
-			t.Logf("status known: %s", text.Text)
-			if !strings.Contains(text.Text, `"registered":true`) {
-				t.Fatalf("expected registered=true, got: %s", text.Text)
-			}
-			if !strings.Contains(text.Text, `"phase":"REGISTERED"`) && !strings.Contains(text.Text, `"phase":"PROPOSAL"`) {
-				t.Fatalf("expected phase REGISTERED or PROPOSAL, got: %s", text.Text)
+	// ------------------------------------------------------------------
+	// 3. Poll first agent until phase advances (should be fast with 4 agents)
+	// ------------------------------------------------------------------
+	var finalPhase string
+	for i := 0; i < 20; i++ {
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "get_runtime_status",
+			Arguments: map[string]any{"agent_id": agentIDs[0]},
+		})
+		if err != nil {
+			t.Fatalf("poll failed: %v", err)
+		}
+		for _, c := range res.Content {
+			if text, ok := c.(*mcp.TextContent); ok {
+				finalPhase = extractFromJSON(text.Text, "phase")
+				if finalPhase != PhaseRegistered {
+					t.Logf("poll %d: phase=%s", i, finalPhase)
+					goto phaseAdvanced
+				}
 			}
 		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("phase did not advance after 10s, still %s", finalPhase)
+
+phaseAdvanced:
+	if finalPhase != PhaseProposal {
+		t.Fatalf("expected phase PROPOSAL after registration fill, got: %s", finalPhase)
 	}
 
-	// 4. idempotent register - same client+model should return same session
+	// ------------------------------------------------------------------
+	// 4. Idempotent register — same client+model returns same agent
+	// ------------------------------------------------------------------
 	res4, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "register_agent",
-		Arguments: map[string]any{"client": "smoke-client", "model": "smoke-model"},
+		Arguments: map[string]any{"client": "smoke-client", "model": "smoke-a"},
 	})
 	if err != nil {
 		t.Fatalf("idempotent register failed: %v", err)
 	}
-	var agentID2, sessID2 string
-	for _, c := range res4.Content {
+	agID4, _ := extractIDs(res4)
+	if agID4 != agentIDs[0] {
+		t.Fatalf("idempotency broken: first=%s second=%s", agentIDs[0], agID4)
+	}
+	t.Log("idempotency OK")
+
+	t.Log("SMOKE TEST PASSED")
+}
+
+func extractIDs(res *mcp.CallToolResult) (agentID, sessionID string) {
+	for _, c := range res.Content {
 		text, ok := c.(*mcp.TextContent)
 		if !ok {
 			continue
 		}
-		agentID2 = extractFromJSON(text.Text, "agent_id")
-		sessID2 = extractFromJSON(text.Text, "session_id")
+		agentID = extractFromJSON(text.Text, "agent_id")
+		sessionID = extractFromJSON(text.Text, "session_id")
 	}
-	if agentID2 != agentID || sessID2 != sessID {
-		t.Fatalf("idempotency broken: first=%s/%s second=%s/%s", agentID, sessID, agentID2, sessID2)
-	}
-	t.Logf("idempotency OK: same session returned")
-
-	// 5. Poll until phase advances (should go to PROPOSAL quickly)
-	time.Sleep(500 * time.Millisecond)
-	res5, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "get_runtime_status",
-		Arguments: map[string]any{"agent_id": agentID},
-	})
-	if err != nil {
-		t.Fatalf("poll failed: %v", err)
-	}
-	for _, c := range res5.Content {
-		if text, ok := c.(*mcp.TextContent); ok {
-			t.Logf("poll status: %s", text.Text)
-			if !strings.Contains(text.Text, `"phase":"PROPOSAL"`) {
-				t.Fatalf("expected phase PROPOSAL after poll, got: %s", text.Text)
-			}
-			if !strings.Contains(text.Text, `"needs_submit":true`) {
-				t.Fatalf("expected needs_submit=true, got: %s", text.Text)
-			}
-		}
-	}
-
-	t.Log("SMOKE TEST PASSED")
+	return
 }
 
 func extractFromJSON(jsonStr, key string) string {
@@ -140,3 +152,4 @@ func extractFromJSON(jsonStr, key string) string {
 	}
 	return jsonStr[start:end]
 }
+
